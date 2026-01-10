@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,6 +43,7 @@ func NewPageHandler(cfgMgr *config.Manager, feedSvc *service.FeedService, taskSv
 			b, _ := json.Marshal(v)
 			return template.JS(b)
 		},
+		"add": func(a, b int) int { return a + b },
 		"configEntries": func(m map[string]string) []configKV {
 			var entries []configKV
 			for k, v := range m {
@@ -98,9 +100,49 @@ type PageData struct {
 
 type TaskView struct {
 	model.Task
+	BotName      string
 	ScheduleDesc string
 	LastRunAt    string
 	NextRunAt    string
+}
+
+type FeedListView struct {
+	Items    []FeedView
+	Total    int
+	TotalAll int
+	Page     int
+	PageSize int
+	Pages    int
+	Query    string
+}
+
+type FeedView struct {
+	model.Feed
+	TodayCount int
+	LastUpdate string
+	NextUpdate string
+}
+
+type TaskListView struct {
+	Items    []TaskView
+	Total    int
+	TotalAll int
+	Page     int
+	PageSize int
+	Pages    int
+	Query    string
+}
+
+type LogListView struct {
+	Items    []model.ExecutionLog
+	Total    int
+	TotalAll int
+	Page     int
+	PageSize int
+	Pages    int
+	Query    string
+	Status   string
+	TaskID   string
 }
 
 func (h *PageHandler) render(c *gin.Context, tmpl string, data PageData) {
@@ -173,6 +215,20 @@ func (h *PageHandler) Tasks(c *gin.Context) {
 	stateSvc := service.NewTaskStateService(h.cfgMgr)
 	now := time.Now()
 
+	q := strings.TrimSpace(c.Query("q"))
+	page := 1
+	if p := strings.TrimSpace(c.Query("page")); p != "" {
+		if v, err := strconv.Atoi(p); err == nil && v > 0 {
+			page = v
+		}
+	}
+	pageSize := 8
+
+	botNames := make(map[string]string, len(bots))
+	for _, b := range bots {
+		botNames[b.ID] = b.Name
+	}
+
 	var views []TaskView
 	for _, t := range tasks {
 		desc := describeCron(t.Schedule)
@@ -190,19 +246,64 @@ func (h *PageHandler) Tasks(c *gin.Context) {
 
 		views = append(views, TaskView{
 			Task:         t,
+			BotName:      botNames[t.BotID],
 			ScheduleDesc: desc,
 			LastRunAt:    last,
 			NextRunAt:    next,
 		})
 	}
 
+	totalAll := len(views)
+	filtered := filterTasksByQuery(views, q)
+	total := len(filtered)
+	pages := (total + pageSize - 1) / pageSize
+	if pages == 0 {
+		pages = 1
+	}
+	if page > pages {
+		page = pages
+	}
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+
+	items := []TaskView{}
+	if start < end {
+		items = filtered[start:end]
+	}
+
 	h.render(c, "layout.html", PageData{
 		Title:    "任务列表",
 		Active:   "tasks",
-		Tasks:    views,
+		Tasks:    TaskListView{Items: items, Total: total, TotalAll: totalAll, Page: page, PageSize: pageSize, Pages: pages, Query: q},
 		Bots:     bots,
 		Channels: channels,
 	})
+}
+
+func filterTasksByQuery(tasks []TaskView, q string) []TaskView {
+	q = strings.ToLower(strings.TrimSpace(q))
+	if q == "" {
+		return tasks
+	}
+	var out []TaskView
+	for _, t := range tasks {
+		if strings.Contains(strings.ToLower(t.ID), q) ||
+			strings.Contains(strings.ToLower(t.Name), q) ||
+			strings.Contains(strings.ToLower(t.Description), q) ||
+			strings.Contains(strings.ToLower(t.Remark), q) ||
+			strings.Contains(strings.ToLower(t.BotID), q) ||
+			strings.Contains(strings.ToLower(t.BotName), q) ||
+			strings.Contains(strings.ToLower(t.Schedule), q) {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 func describeCron(expr string) string {
@@ -299,12 +400,133 @@ func (h *PageHandler) TaskDetail(c *gin.Context) {
 // Feeds RSS订阅列表页
 func (h *PageHandler) Feeds(c *gin.Context) {
 	feeds, _ := h.feedSvc.List()
+	// 按添加时间排序：配置文件中追加在末尾，因此倒序展示即为“最近添加在最前”。
+	feedsSorted := make([]model.Feed, len(feeds))
+	copy(feedsSorted, feeds)
+	for i, j := 0, len(feedsSorted)-1; i < j; i, j = i+1, j-1 {
+		feedsSorted[i], feedsSorted[j] = feedsSorted[j], feedsSorted[i]
+	}
+
+	now := time.Now().In(time.Local)
+	today := now.Format("2006-01-02")
+
+	// 统计：今日每个订阅的文章数、最新抓取时间（来自 overview.json）
+	todayCount := make(map[string]int)
+	todayLastFetched := make(map[string]time.Time)
+	if overview, err := h.feedSvc.LoadOverview(today); err == nil && overview != nil {
+		for _, a := range overview.Articles {
+			todayCount[a.FeedID]++
+			if prev, ok := todayLastFetched[a.FeedID]; !ok || a.Fetched.After(prev) {
+				todayLastFetched[a.FeedID] = a.Fetched
+			}
+		}
+	}
+
+	// 下次更新时间：按系统默认拉取间隔推算（全局 RSS fetch）
+	nextUpdate := "-"
+	intervalMin := 5
+	if settings, err := h.cfgMgr.LoadSettings(); err == nil && settings != nil && settings.Fetch.DefaultInterval > 0 {
+		intervalMin = settings.Fetch.DefaultInterval
+	}
+	nextUpdate = nextTickByMinuteInterval(now, intervalMin).Format("01-02 15:04")
+
+	feedState := service.NewFeedStateService(h.cfgMgr)
+
+	q := strings.TrimSpace(c.Query("q"))
+	page := 1
+	if p := strings.TrimSpace(c.Query("page")); p != "" {
+		if v, err := strconv.Atoi(p); err == nil && v > 0 {
+			page = v
+		}
+	}
+	pageSize := 8
+
+	totalAll := len(feedsSorted)
+	filtered := filterFeedsByQuery(feedsSorted, q)
+	total := len(filtered)
+	pages := (total + pageSize - 1) / pageSize
+	if pages == 0 {
+		pages = 1
+	}
+	if page > pages {
+		page = pages
+	}
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+
+	items := []FeedView{}
+	if start < end {
+		for _, f := range filtered[start:end] {
+			lastUpdate := "-"
+			if st, err := feedState.Load(f.ID); err == nil && st != nil && st.LastFetchAt != "" {
+				if t, err := time.Parse(time.RFC3339, st.LastFetchAt); err == nil {
+					lastUpdate = t.In(time.Local).Format("01-02 15:04")
+				}
+			} else if t, ok := todayLastFetched[f.ID]; ok && !t.IsZero() {
+				lastUpdate = t.In(time.Local).Format("01-02 15:04")
+			}
+
+			items = append(items, FeedView{
+				Feed:       f,
+				TodayCount: todayCount[f.ID],
+				LastUpdate: lastUpdate,
+				NextUpdate: nextUpdate,
+			})
+		}
+	}
 
 	h.render(c, "layout.html", PageData{
 		Title:  "RSS订阅",
 		Active: "feeds",
-		Feeds:  feeds,
+		Feeds: FeedListView{
+			Items:    items,
+			Total:    total,
+			TotalAll: totalAll,
+			Page:     page,
+			PageSize: pageSize,
+			Pages:    pages,
+			Query:    q,
+		},
 	})
+}
+
+func nextTickByMinuteInterval(now time.Time, intervalMin int) time.Time {
+	if intervalMin <= 0 {
+		intervalMin = 5
+	}
+	if intervalMin > 60 {
+		intervalMin = 60
+	}
+	t := now.Truncate(time.Minute)
+	m := t.Minute()
+	nextMin := ((m / intervalMin) + 1) * intervalMin
+	if nextMin >= 60 {
+		return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), 0, 0, 0, t.Location()).Add(time.Hour)
+	}
+	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), nextMin, 0, 0, t.Location())
+}
+
+func filterFeedsByQuery(feeds []model.Feed, q string) []model.Feed {
+	q = strings.ToLower(strings.TrimSpace(q))
+	if q == "" {
+		return feeds
+	}
+	var out []model.Feed
+	for _, f := range feeds {
+		if strings.Contains(strings.ToLower(f.Name), q) ||
+			strings.Contains(strings.ToLower(f.URL), q) ||
+			strings.Contains(strings.ToLower(f.Remark), q) ||
+			strings.Contains(strings.ToLower(f.ID), q) {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // FeedNew 新建RSS订阅页
@@ -351,7 +573,7 @@ func (h *PageHandler) Bots(c *gin.Context) {
 	bots, _ := h.botSvc.List()
 
 	h.render(c, "layout.html", PageData{
-		Title:  "AI机器人",
+		Title:  "AI配置",
 		Active: "bots",
 		Bots:   bots,
 	})
@@ -379,18 +601,92 @@ func (h *PageHandler) BotDetail(c *gin.Context) {
 
 // Logs 日志页
 func (h *PageHandler) Logs(c *gin.Context) {
-	logs, _ := h.logSvc.List(100)
+	q := strings.TrimSpace(c.Query("q"))
+	status := strings.TrimSpace(c.Query("status"))
+	taskID := strings.TrimSpace(c.Query("task_id"))
+	page := 1
+	if p := strings.TrimSpace(c.Query("page")); p != "" {
+		if v, err := strconv.Atoi(p); err == nil && v > 0 {
+			page = v
+		}
+	}
+	pageSize := 10
+
+	logs, _ := h.logSvc.List(0)
 	stats, _ := h.logSvc.GetStats()
 	statsToday, _ := h.logSvc.GetStatsToday()
 	tasks, _ := h.taskSvc.List()
 
+	totalAll := len(logs)
+	filtered := filterLogsByQuery(logs, q, status, taskID)
+	total := len(filtered)
+	pages := (total + pageSize - 1) / pageSize
+	if pages == 0 {
+		pages = 1
+	}
+	if page > pages {
+		page = pages
+	}
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+
+	items := []model.ExecutionLog{}
+	if start < end {
+		items = filtered[start:end]
+	}
+
 	h.render(c, "layout.html", PageData{
 		Title:  "执行日志",
 		Active: "logs",
-		Logs:   logs,
-		Stats:  map[string]interface{}{"all": stats, "today": statsToday},
-		Tasks:  tasks,
+		Logs: LogListView{
+			Items:    items,
+			Total:    total,
+			TotalAll: totalAll,
+			Page:     page,
+			PageSize: pageSize,
+			Pages:    pages,
+			Query:    q,
+			Status:   status,
+			TaskID:   taskID,
+		},
+		Stats: map[string]interface{}{"all": stats, "today": statsToday},
+		Tasks: tasks,
 	})
+}
+
+func filterLogsByQuery(logs []model.ExecutionLog, q, status, taskID string) []model.ExecutionLog {
+	q = strings.ToLower(strings.TrimSpace(q))
+	status = strings.ToLower(strings.TrimSpace(status))
+	taskID = strings.TrimSpace(taskID)
+
+	var out []model.ExecutionLog
+	for _, l := range logs {
+		if taskID != "" && l.TaskID != taskID {
+			continue
+		}
+		if status != "" && strings.ToLower(l.Status) != status {
+			continue
+		}
+		if q == "" {
+			out = append(out, l)
+			continue
+		}
+
+		if strings.Contains(strings.ToLower(l.TaskID), q) ||
+			strings.Contains(strings.ToLower(l.TaskName), q) ||
+			strings.Contains(strings.ToLower(l.Status), q) ||
+			strings.Contains(strings.ToLower(l.Details), q) ||
+			strings.Contains(strings.ToLower(l.Error), q) {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 // Settings 设置页

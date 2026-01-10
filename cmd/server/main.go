@@ -11,6 +11,7 @@ import (
 
 	"github.com/echofeed/echofeed/internal/config"
 	"github.com/echofeed/echofeed/internal/handler"
+	"github.com/echofeed/echofeed/internal/middleware"
 	"github.com/echofeed/echofeed/internal/scheduler"
 	"github.com/echofeed/echofeed/internal/service"
 )
@@ -45,6 +46,9 @@ func main() {
 	botSvc := service.NewBotService(cfgMgr)
 	logSvc := service.NewLogService(cfgMgr)
 
+	// 应用日志配置（level/rotation）
+	service.ConfigureAppLogger(dataDir, settings.Log)
+
 	// 初始化调度器
 	sched := scheduler.NewScheduler(cfgMgr, feedSvc, taskSvc, botSvc, channelSvc, logSvc)
 	sched.Start()
@@ -53,6 +57,7 @@ func main() {
 	// 初始化Gin
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
+	r.Use(middleware.BasicAuthFromSettings(cfgMgr))
 
 	// 静态资源
 	r.Static("/static", "./web/static")
@@ -64,7 +69,7 @@ func main() {
 	channelHandler := handler.NewChannelHandler(channelSvc)
 	botHandler := handler.NewBotHandler(botSvc)
 	logHandler := handler.NewLogHandler(logSvc)
-	settingsHandler := handler.NewSettingsHandler(cfgMgr)
+	settingsHandler := handler.NewSettingsHandler(cfgMgr, sched)
 
 	// 页面路由
 	r.GET("/", pageHandler.Index)
@@ -88,6 +93,7 @@ func main() {
 		// Feed API
 		api.GET("/feeds", feedHandler.List)
 		api.POST("/feeds", feedHandler.Create)
+		api.POST("/feeds/refresh_all", feedHandler.RefreshAll)
 		api.GET("/feeds/:id", feedHandler.Get)
 		api.PUT("/feeds/:id", feedHandler.Update)
 		api.DELETE("/feeds/:id", feedHandler.Delete)

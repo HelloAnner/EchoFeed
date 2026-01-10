@@ -134,7 +134,8 @@ func (e *TaskEngine) ExecuteTaskForDate(taskID string, date string) error {
 	if len(filteredOverview.Articles) == 0 {
 		log.Info().Str("task", task.Name).Str("date", date).Msg("All articles already sent, skipping task execution")
 		execLog.Status = model.LogStatusNoMatch
-		execLog.Details = "今日文章已全部发送"
+		detailParts = append(detailParts, "原因=今日文章已全部发送")
+		execLog.Details = strings.Join(detailParts, "; ")
 		return nil
 	}
 
@@ -146,7 +147,8 @@ func (e *TaskEngine) ExecuteTaskForDate(taskID string, date string) error {
 	if overviewHash != "" && e.taskState.IsOverviewAnalyzed(task.ID, date, overviewHash) {
 		log.Info().Str("task", task.Name).Str("date", date).Msg("No new articles since last analysis, skipping task execution")
 		execLog.Status = model.LogStatusNoMatch
-		execLog.Details = "与上次相比无新增文章"
+		detailParts = append(detailParts, "原因=与上次相比无新增文章")
+		execLog.Details = strings.Join(detailParts, "; ")
 		return nil
 	}
 
@@ -179,14 +181,14 @@ func (e *TaskEngine) ExecuteTaskForDate(taskID string, date string) error {
 		return fmt.Errorf("unsupported provider: %s", bot.Provider)
 	}
 
-	// 构建筛选提示词
-	filterPrompt := e.buildFilterPrompt(task)
+	filterCriteria := e.buildFilterCriteria(task)
+	outputFormat := e.buildOutputFormat(task)
 
 	// ========== 第一阶段：选择文章 ==========
 	log.Info().Str("task", task.Name).Int("articles", len(filteredOverview.Articles)).Msg("Phase 1: Selecting articles from overview")
 
 	overviewContent := e.buildOverviewContent(filteredOverview)
-	phase1Prompt := fmt.Sprintf("%s\n\n%s", model.SystemPromptPhase1, filterPrompt)
+	phase1Prompt := e.buildPhase1Prompt(task, filterCriteria)
 
 	selectionResult, err := provider.AnalyzeForSelection(phase1Prompt, overviewContent)
 	if err != nil {
@@ -205,7 +207,8 @@ func (e *TaskEngine) ExecuteTaskForDate(taskID string, date string) error {
 	if len(selectedIDs) == 0 {
 		log.Info().Str("task", task.Name).Str("reason", selectionResult.Reason).Msg("No articles selected in phase 1")
 		execLog.Status = model.LogStatusNoMatch
-		execLog.Details = "第一阶段未选中任何文章：" + selectionResult.Reason
+		detailParts = append(detailParts, "原因=第一阶段未选中任何文章："+truncateForLog(selectionResult.Reason, 200))
+		execLog.Details = strings.Join(detailParts, "; ")
 		return nil
 	}
 	detailParts = append(detailParts, fmt.Sprintf("第一阶段选中=%d", len(selectedIDs)))
@@ -220,11 +223,12 @@ func (e *TaskEngine) ExecuteTaskForDate(taskID string, date string) error {
 	if fullContent == "" {
 		log.Warn().Str("task", task.Name).Msg("Failed to load selected articles content")
 		execLog.Status = model.LogStatusNoMatch
-		execLog.Details = "加载文章内容失败"
+		detailParts = append(detailParts, "原因=加载文章内容失败")
+		execLog.Details = strings.Join(detailParts, "; ")
 		return nil
 	}
 
-	phase2Prompt := fmt.Sprintf("%s\n\n%s", model.SystemPromptPhase2, filterPrompt)
+	phase2Prompt := e.buildPhase2Prompt(task, filterCriteria, outputFormat)
 
 	analysisResult, err := provider.Analyze(phase2Prompt, fullContent)
 	if err != nil {
@@ -238,7 +242,8 @@ func (e *TaskEngine) ExecuteTaskForDate(taskID string, date string) error {
 	if !analysisResult.HasContent || len(analysisResult.Items) == 0 {
 		log.Info().Str("task", task.Name).Msg("No matching content found after detailed analysis")
 		execLog.Status = model.LogStatusNoMatch
-		execLog.Details = "第二阶段无匹配内容"
+		detailParts = append(detailParts, "原因=第二阶段无匹配内容")
+		execLog.Details = strings.Join(detailParts, "; ")
 		return nil
 	}
 
@@ -251,7 +256,8 @@ func (e *TaskEngine) ExecuteTaskForDate(taskID string, date string) error {
 	if len(prepared) == 0 {
 		log.Info().Str("task", task.Name).Msg("All matched content already processed or below importance")
 		execLog.Status = model.LogStatusNoMatch
-		execLog.Details = "匹配内容均已发送或重要性不足"
+		detailParts = append(detailParts, "原因=匹配内容均已发送或重要性不足")
+		execLog.Details = strings.Join(detailParts, "; ")
 		return nil
 	}
 	analysisResult.Items = prepared
@@ -265,7 +271,7 @@ func (e *TaskEngine) ExecuteTaskForDate(taskID string, date string) error {
 		return err
 	}
 	execLog.Status = model.LogStatusSuccess
-	execLog.Details = fmt.Sprintf("已发送 %d 条", execLog.MatchCount)
+	detailParts = append(detailParts, fmt.Sprintf("已发送=%d", execLog.MatchCount))
 	return nil
 }
 
@@ -451,7 +457,7 @@ func (e *TaskEngine) enrichNotifyItem(task *model.Task, item model.AIAnalysisIte
 }
 
 func (e *TaskEngine) normalizeCnSummaryFull(summary string, keywords []string, fallbackKeywords []string) string {
-	s := strings.TrimSpace(summary)
+	s := sanitizeSummaryText(summary)
 	s = strings.ReplaceAll(s, "\n", " ")
 	s = strings.Join(strings.Fields(s), " ")
 
@@ -468,7 +474,7 @@ func (e *TaskEngine) normalizeCnSummaryFull(summary string, keywords []string, f
 }
 
 func (e *TaskEngine) normalizeCnSummary(summary string, keywords []string, fallbackKeywords []string, maxRunes int) string {
-	s := strings.TrimSpace(summary)
+	s := sanitizeSummaryText(summary)
 	s = strings.ReplaceAll(s, "\n", " ")
 	s = strings.Join(strings.Fields(s), " ")
 
@@ -550,32 +556,52 @@ func cutAtSeparator(s string, maxRunes int) string {
 	return out
 }
 
-// buildFilterPrompt 构建筛选提示词
-func (e *TaskEngine) buildFilterPrompt(task *model.Task) string {
-	// 如果用户设置了自定义筛选提示词，使用自定义的
-	if task.Prompt.Template == "custom" && task.Prompt.FilterPrompt != "" {
+func (e *TaskEngine) buildFilterCriteria(task *model.Task) string {
+	if task == nil {
+		return ""
+	}
+	if strings.TrimSpace(task.Prompt.FilterCriteria) != "" {
+		return task.Prompt.FilterCriteria
+	}
+	// 兼容旧字段
+	if strings.TrimSpace(task.Prompt.FilterPrompt) != "" {
 		return task.Prompt.FilterPrompt
 	}
-
-	// 使用默认筛选提示词模板
-	prompt := model.DefaultFilterPrompt
-
-	// 替换关键词变量
 	if len(task.Prompt.Keywords) > 0 {
-		keywords := strings.Join(task.Prompt.Keywords, ", ")
-		prompt = strings.ReplaceAll(prompt, "{keywords}", keywords)
-	} else {
-		prompt = strings.ReplaceAll(prompt, "{keywords}", "无特定关键词，选择有价值的内容")
+		return "关注关键词：" + strings.Join(task.Prompt.Keywords, "、")
 	}
+	return "选择最有价值、信息密度高的文章（宁缺毋滥）。"
+}
 
-	// 替换最低重要度变量
-	minImportance := task.Prompt.MinImportance
-	if minImportance == 0 {
-		minImportance = 3
+func (e *TaskEngine) buildOutputFormat(task *model.Task) string {
+	if task == nil {
+		return model.DefaultTaskOutputFormat
 	}
-	prompt = strings.ReplaceAll(prompt, "{min_importance}", fmt.Sprintf("%d", minImportance))
+	if strings.TrimSpace(task.Prompt.OutputFormat) != "" {
+		return task.Prompt.OutputFormat
+	}
+	return model.DefaultTaskOutputFormat
+}
 
-	return prompt
+func (e *TaskEngine) buildPhase1Prompt(task *model.Task, criteria string) string {
+	minImportance := 3
+	if task != nil && task.Prompt.MinImportance > 0 {
+		minImportance = task.Prompt.MinImportance
+	}
+	return fmt.Sprintf("%s\n\n=== 筛选条件 ===\n%s\n\n最低重要度：%d/5\n", model.SystemPromptPhase1, strings.TrimSpace(criteria), minImportance)
+}
+
+func (e *TaskEngine) buildPhase2Prompt(task *model.Task, criteria, outputFormat string) string {
+	minImportance := 3
+	if task != nil && task.Prompt.MinImportance > 0 {
+		minImportance = task.Prompt.MinImportance
+	}
+	return fmt.Sprintf("%s\n\n=== 筛选条件 ===\n%s\n\n最低重要度：%d/5\n\n=== 输出格式（单篇文章）===\n%s\n\n请按系统要求输出 JSON（has_content + items），items 中每个对象按上面输出格式填充。\n",
+		model.SystemPromptPhase2,
+		strings.TrimSpace(criteria),
+		minImportance,
+		strings.TrimSpace(outputFormat),
+	)
 }
 
 // sendNotifications 发送通知
@@ -733,8 +759,9 @@ func (e *TaskEngine) ExecuteTaskSimple(taskID string) error {
 
 	// 构建内容和提示词
 	content := e.buildOverviewContent(overview)
-	filterPrompt := e.buildFilterPrompt(task)
-	prompt := fmt.Sprintf("%s\n\n%s", model.SystemPromptPhase2, filterPrompt)
+	filterCriteria := e.buildFilterCriteria(task)
+	outputFormat := e.buildOutputFormat(task)
+	prompt := e.buildPhase2Prompt(task, filterCriteria, outputFormat)
 
 	result, err := provider.Analyze(prompt, content)
 	if err != nil {

@@ -246,108 +246,6 @@
 </div>
 
 <script>
-function enhanceShadcnSelect(selectId) {
-    const select = document.getElementById(selectId);
-    if (!select) return;
-    if (select.dataset.enhanced === '1') return;
-    select.dataset.enhanced = '1';
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'relative';
-    select.parentNode.insertBefore(wrapper, select);
-    wrapper.appendChild(select);
-
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2';
-
-    const label = document.createElement('span');
-    label.className = 'truncate';
-    const icon = document.createElement('span');
-    icon.className = 'ml-2 text-muted-foreground';
-    icon.innerHTML = `
-        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M6 9l6 6 6-6"></path>
-        </svg>
-    `;
-    button.appendChild(label);
-    button.appendChild(icon);
-
-    const menu = document.createElement('div');
-    menu.className = 'absolute z-50 mt-1 w-full rounded-md border border-input bg-background p-1 shadow-md hidden';
-
-    const optionButtons = [];
-    Array.from(select.options).forEach(opt => {
-        const item = document.createElement('button');
-        item.type = 'button';
-        item.className = 'w-full text-left rounded-sm px-2 py-1.5 text-sm hover:bg-secondary';
-        item.textContent = opt.textContent || '';
-        item.dataset.value = opt.value;
-        item.addEventListener('click', () => {
-            select.value = opt.value;
-            select.dispatchEvent(new Event('change', { bubbles: true }));
-            menu.classList.add('hidden');
-            sync();
-        });
-        menu.appendChild(item);
-        optionButtons.push(item);
-    });
-
-    function getSelectedLabel() {
-        const selected = select.options[select.selectedIndex];
-        if (selected && selected.value !== '') {
-            return selected.textContent || '';
-        }
-        const placeholderOpt = Array.from(select.options).find(o => o.value === '');
-        return (placeholderOpt?.textContent || '请选择');
-    }
-
-    function sync() {
-        label.textContent = getSelectedLabel();
-        optionButtons.forEach(btn => {
-            if (btn.dataset.value === select.value) {
-                btn.classList.add('bg-secondary');
-            } else {
-                btn.classList.remove('bg-secondary');
-            }
-        });
-    }
-
-    function closeAll(exceptMenu) {
-        document.querySelectorAll('[data-shadcn-select-menu="1"]').forEach(m => {
-            if (m !== exceptMenu) m.classList.add('hidden');
-        });
-    }
-
-    menu.dataset.shadcnSelectMenu = '1';
-
-    button.addEventListener('click', (e) => {
-        e.preventDefault();
-        const isHidden = menu.classList.contains('hidden');
-        closeAll(menu);
-        if (isHidden) {
-            menu.classList.remove('hidden');
-        } else {
-            menu.classList.add('hidden');
-        }
-    });
-
-    document.addEventListener('click', (e) => {
-        if (!wrapper.contains(e.target)) {
-            menu.classList.add('hidden');
-        }
-    });
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            menu.classList.add('hidden');
-        }
-    });
-
-    wrapper.appendChild(button);
-    wrapper.appendChild(menu);
-    sync();
-}
-
 function toggleChannelConfig() {
     const type = document.getElementById('channel-type').value;
     document.getElementById('config-telegram').classList.add('hidden');
@@ -382,10 +280,6 @@ function toggleWebhookTemplatePreview() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    enhanceShadcnSelect('channel-type');
-    enhanceShadcnSelect('webhook-type');
-    enhanceShadcnSelect('webhook-method');
-
     toggleChannelConfig();
     const webhookTypeEl = document.getElementById('webhook-type');
     if (webhookTypeEl) {

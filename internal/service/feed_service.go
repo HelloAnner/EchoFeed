@@ -26,13 +26,16 @@ type FeedService struct {
 	cfgMgr *config.Manager
 	parser *gofeed.Parser
 	mu     sync.RWMutex
+
+	stateSvc *FeedStateService
 }
 
 // NewFeedService 创建RSS订阅服务
 func NewFeedService(cfgMgr *config.Manager) *FeedService {
 	return &FeedService{
-		cfgMgr: cfgMgr,
-		parser: gofeed.NewParser(),
+		cfgMgr:   cfgMgr,
+		parser:   gofeed.NewParser(),
+		stateSvc: NewFeedStateService(cfgMgr),
 	}
 }
 
@@ -120,7 +123,19 @@ func (s *FeedService) GetSettings() (*model.FeedSettings, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &cfg.Settings, nil
+	settings := cfg.Settings
+	if sys, err := s.cfgMgr.LoadSettings(); err == nil && sys != nil {
+		if sys.Fetch.DefaultInterval > 0 {
+			settings.DefaultInterval = sys.Fetch.DefaultInterval
+		}
+		if sys.Fetch.Timeout > 0 {
+			settings.Timeout = sys.Fetch.Timeout
+		}
+		if sys.Fetch.MaxConcurrent > 0 {
+			settings.MaxConcurrent = sys.Fetch.MaxConcurrent
+		}
+	}
+	return &settings, nil
 }
 
 // TestFeedURL 测试RSS订阅URL连通性与可解析性（用于保存前校验）
@@ -222,7 +237,14 @@ func convertToReadableText(item *gofeed.Item, feedName string) string {
 }
 
 // Fetch 拉取单个订阅并保存到日期目录（按文章发布日期归档）
-func (s *FeedService) Fetch(feed *model.Feed) error {
+func (s *FeedService) Fetch(feed *model.Feed) (err error) {
+	startedAt := time.Now().In(time.Local)
+	defer func() {
+		if s.stateSvc != nil && feed != nil && feed.ID != "" {
+			_ = s.stateSvc.MarkFetch(feed.ID, startedAt, err)
+		}
+	}()
+
 	log.Info().Str("feed", feed.Name).Str("url", feed.URL).Msg("Fetching feed")
 
 	parsedFeed, err := s.parser.ParseURL(feed.URL)

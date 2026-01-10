@@ -14,7 +14,7 @@
                     </div>
                     <div class="space-y-2">
                         <label class="text-sm font-medium">AI 服务提供商 *</label>
-                        <select id="bot-provider" class="input" required onchange="toggleBotConfig()">
+                        <select id="bot-provider" class="sr-only" data-shadcn-select="1" required onchange="toggleBotConfig()">
                             <option value="">请选择提供商</option>
                             <option value="openai" {{if and .Data (eq .Data.Provider "openai")}}selected{{end}}>OpenAI</option>
                             <option value="deepseek" {{if and .Data (eq .Data.Provider "deepseek")}}selected{{end}}>DeepSeek (OpenAI 兼容)</option>
@@ -313,7 +313,7 @@ function saveBot(e) {
 <!-- Bot List -->
 <div class="space-y-4">
     <div class="flex items-center justify-between">
-        <p class="text-sm text-muted-foreground">配置 AI 机器人</p>
+        <p class="text-sm text-muted-foreground">配置 AI配置</p>
         <a href="/bots/new" class="btn btn-primary">
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
@@ -356,7 +356,7 @@ function saveBot(e) {
         </div>
         {{else}}
         <div class="col-span-full text-center py-12 text-muted-foreground">
-            暂无 AI 机器人，<a href="/bots/new" class="text-primary underline">点击添加</a>
+            暂无 AI配置，<a href="/bots/new" class="text-primary underline">点击添加</a>
         </div>
         {{end}}
     </div>

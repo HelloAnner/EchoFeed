@@ -14,7 +14,7 @@
                     </div>
                     <div class="space-y-2">
                         <label class="text-sm font-medium">服务端口</label>
-                        <input type="number" id="server-port" value="{{if .Data}}{{.Data.Server.Port}}{{else}}8080{{end}}" class="input">
+                        <input type="number" id="server-port" value="{{if .Data}}{{.Data.Server.Port}}{{else}}33333{{end}}" class="input">
                         <p class="text-xs text-muted-foreground">需重启生效</p>
                     </div>
                 </div>
@@ -51,7 +51,7 @@
                 <div class="grid grid-cols-2 gap-4">
                     <div class="space-y-2">
                         <label class="text-sm font-medium">日志级别</label>
-                        <select id="log-level" class="input">
+                        <select id="log-level" class="sr-only" data-shadcn-select="1">
                             <option value="debug" {{if and .Data (eq .Data.Log.Level "debug")}}selected{{end}}>Debug</option>
                             <option value="info" {{if or (not .Data) (eq .Data.Log.Level "info")}}selected{{end}}>Info</option>
                             <option value="warn" {{if and .Data (eq .Data.Log.Level "warn")}}selected{{end}}>Warn</option>
@@ -111,7 +111,7 @@ function saveSettings(e) {
     const settings = {
         server: {
             host: document.getElementById('server-host').value,
-            port: parseInt(document.getElementById('server-port').value) || 8080
+            port: parseInt(document.getElementById('server-port').value) || 33333
         },
         fetch: {
             default_interval: parseInt(document.getElementById('fetch-interval').value) || 5,

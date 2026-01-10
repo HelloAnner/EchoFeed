@@ -1,13 +1,34 @@
 {{define "page_feeds"}}
 <div class="space-y-4">
     <div class="flex items-center justify-between">
-        <p class="text-sm text-muted-foreground">管理 RSS 订阅源</p>
-        <button onclick="openFeedModal()" class="btn btn-primary">
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
-            添加订阅
-        </button>
+        <div class="flex items-center gap-3">
+            <p class="text-sm text-muted-foreground">管理 RSS 订阅源</p>
+            <span class="text-xs text-muted-foreground">
+                共 {{.Feeds.Total}} 个订阅{{if and .Feeds.Query (ne .Feeds.Total .Feeds.TotalAll)}}（全部 {{.Feeds.TotalAll}}）{{end}}
+            </span>
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="refreshAllFeeds()" class="btn btn-outline">更新全部订阅</button>
+            <button onclick="openFeedModal()" class="btn btn-primary">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                添加订阅
+            </button>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-between gap-3">
+        <form method="GET" action="/feeds" class="flex-1 flex items-center gap-2">
+            <input type="text" name="q" value="{{.Feeds.Query}}" class="input max-w-md" placeholder="搜索名称/URL/备注/ID（模糊匹配）">
+            <button type="submit" class="btn btn-outline">搜索</button>
+            {{if .Feeds.Query}}
+            <a href="/feeds" class="btn btn-ghost">清空</a>
+            {{end}}
+        </form>
+        <div class="text-xs text-muted-foreground whitespace-nowrap">
+            第 {{.Feeds.Page}} / {{.Feeds.Pages}} 页
+        </div>
     </div>
 
     <div class="card overflow-hidden">
@@ -15,18 +36,22 @@
             <thead>
                 <tr>
                     <th>名称</th>
-                    <th>URL</th>
                     <th>备注</th>
+                    <th class="whitespace-nowrap">今日文章</th>
+                    <th class="whitespace-nowrap">上次更新</th>
+                    <th class="whitespace-nowrap">下次更新</th>
                     <th>状态</th>
                     <th>操作</th>
                 </tr>
             </thead>
             <tbody>
-                {{range .Feeds}}
+                {{range .Feeds.Items}}
                 <tr>
                     <td class="font-medium">{{.Name}}</td>
-                    <td class="text-sm text-muted-foreground max-w-xs truncate">{{.URL}}</td>
                     <td class="text-sm text-muted-foreground">{{.Remark}}</td>
+                    <td class="text-sm text-muted-foreground whitespace-nowrap">{{.TodayCount}}</td>
+                    <td class="text-sm text-muted-foreground whitespace-nowrap">{{.LastUpdate}}</td>
+                    <td class="text-sm text-muted-foreground whitespace-nowrap">{{.NextUpdate}}</td>
                     <td>
                         {{if .Enabled}}
                         <span class="badge badge-success">启用</span>
@@ -52,13 +77,36 @@
                 </tr>
                 {{else}}
                 <tr>
-                    <td colspan="5" class="text-center py-12 text-muted-foreground">
+                    <td colspan="7" class="text-center py-12 text-muted-foreground">
+                        {{if .Feeds.Query}}
+                        未找到匹配的订阅，<a href="/feeds" class="text-primary underline">清空搜索</a>
+                        {{else}}
                         暂无订阅，<button onclick="openFeedModal()" class="text-primary underline">点击添加</button>
+                        {{end}}
                     </td>
                 </tr>
                 {{end}}
             </tbody>
         </table>
+    </div>
+
+    <div class="flex items-center justify-between">
+        <div class="text-xs text-muted-foreground">
+            每页 {{.Feeds.PageSize}} 条
+        </div>
+        <div class="flex items-center gap-2">
+            {{if gt .Feeds.Page 1}}
+            <a class="btn btn-outline" href="/feeds?page={{add .Feeds.Page -1}}{{if .Feeds.Query}}&q={{.Feeds.Query | urlquery}}{{end}}">上一页</a>
+            {{else}}
+            <button class="btn btn-outline" disabled>上一页</button>
+            {{end}}
+
+            {{if lt .Feeds.Page .Feeds.Pages}}
+            <a class="btn btn-outline" href="/feeds?page={{add .Feeds.Page 1}}{{if .Feeds.Query}}&q={{.Feeds.Query | urlquery}}{{end}}">下一页</a>
+            {{else}}
+            <button class="btn btn-outline" disabled>下一页</button>
+            {{end}}
+        </div>
     </div>
 </div>
 
@@ -113,6 +161,26 @@ function refreshFeed(id) {
         .then(res => res.json())
         .then(data => showToast('刷新已触发'))
         .catch(err => showToast('操作失败', 'error'));
+}
+
+function refreshAllFeeds() {
+    fetch('/api/feeds/refresh_all', { method: 'POST' })
+        .then(async (res) => {
+            let data = {};
+            try {
+                data = await res.json();
+            } catch (_) {
+                data = {};
+            }
+            if (!res.ok) {
+                throw new Error(data.error || '操作失败');
+            }
+            return data;
+        })
+        .then((data) => {
+            showToast(data.message || '已触发更新全部订阅');
+        })
+        .catch(err => showToast(err?.message || '操作失败', 'error'));
 }
 
 function editFeed(id) {

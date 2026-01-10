@@ -1,5 +1,5 @@
 # 构建阶段
-FROM m.daocloud.io/docker.io/library/golang:1.25.3-alpine AS builder
+FROM m.daocloud.io/docker.io/library/golang:1.22.10-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -13,7 +13,6 @@ WORKDIR /app
 COPY --from=builder /app/echofeed .
 COPY --from=builder /app/web ./web
 
-EXPOSE 8080
 EXPOSE 33333
 VOLUME ["/app/data"]
 

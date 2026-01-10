@@ -7,16 +7,19 @@ import (
 
 	"github.com/echofeed/echofeed/internal/config"
 	"github.com/echofeed/echofeed/internal/model"
+	"github.com/echofeed/echofeed/internal/scheduler"
+	"github.com/echofeed/echofeed/internal/service"
 )
 
 // SettingsHandler 系统设置处理器
 type SettingsHandler struct {
 	cfgMgr *config.Manager
+	sched  *scheduler.Scheduler
 }
 
 // NewSettingsHandler 创建系统设置处理器
-func NewSettingsHandler(cfgMgr *config.Manager) *SettingsHandler {
-	return &SettingsHandler{cfgMgr: cfgMgr}
+func NewSettingsHandler(cfgMgr *config.Manager, sched *scheduler.Scheduler) *SettingsHandler {
+	return &SettingsHandler{cfgMgr: cfgMgr, sched: sched}
 }
 
 // Get 获取系统设置
@@ -52,6 +55,11 @@ func (h *SettingsHandler) Update(c *gin.Context) {
 	if err := h.cfgMgr.SaveSettings(&settings); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	service.ConfigureAppLogger(h.cfgMgr.DataDir, settings.Log)
+	if h.sched != nil {
+		h.sched.ReloadRSSFetch()
 	}
 
 	c.JSON(http.StatusOK, settings)

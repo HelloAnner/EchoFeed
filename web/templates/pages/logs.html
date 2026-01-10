@@ -1,31 +1,16 @@
 {{define "page_logs"}}
 <div class="space-y-6">
-    <!-- 统计卡片 -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div class="card p-4">
-            <div class="text-sm text-muted-foreground">今日执行</div>
-            <div class="text-2xl font-bold mt-1" id="stat-today-total">
-                {{if .Stats}}{{with index .Stats "today"}}{{.TotalExecutions}}{{end}}{{else}}0{{end}}
-            </div>
+    <!-- 工具栏 -->
+    <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <p class="text-sm text-muted-foreground">执行日志</p>
+            <span class="text-xs text-muted-foreground">
+                共 {{.Logs.Total}} 条{{if and .Logs.Query (ne .Logs.Total .Logs.TotalAll)}}（全部 {{.Logs.TotalAll}}）{{end}}
+            </span>
         </div>
-        <div class="card p-4">
-            <div class="text-sm text-muted-foreground">今日成功</div>
-            <div class="text-2xl font-bold mt-1 text-green-600" id="stat-today-success">
-                {{if .Stats}}{{with index .Stats "today"}}{{.SuccessCount}}{{end}}{{else}}0{{end}}
-            </div>
-        </div>
-        <div class="card p-4">
-            <div class="text-sm text-muted-foreground">总执行次数</div>
-            <div class="text-2xl font-bold mt-1" id="stat-all-total">
-                {{if .Stats}}{{with index .Stats "all"}}{{.TotalExecutions}}{{end}}{{else}}0{{end}}
-            </div>
-        </div>
-        <div class="card p-4">
-            <div class="text-sm text-muted-foreground">成功率</div>
-            <div class="text-2xl font-bold mt-1" id="stat-success-rate">
-                {{if .Stats}}{{with index .Stats "all"}}{{printf "%.1f" .SuccessRate}}%{{end}}{{else}}0%{{end}}
-            </div>
-        </div>
+        <button onclick="clearLogs()" class="btn btn-outline text-destructive">
+            一键清理
+        </button>
     </div>
 
     <!-- 详细统计 -->
@@ -65,22 +50,32 @@
         </div>
     </div>
 
-    <!-- 筛选工具栏 -->
-    <div class="flex items-center gap-4">
-        <select id="task-filter" class="input w-48" onchange="filterLogs()">
-            <option value="">全部任务</option>
-            {{range .Tasks}}
-            <option value="{{.ID}}">{{.Name}}</option>
-            {{end}}
-        </select>
-        <button onclick="refreshLogs()" class="btn btn-outline">刷新</button>
-        <button onclick="clearLogs()" class="btn btn-outline text-destructive">
-            清理日志
-        </button>
-    </div>
-
     <!-- 日志列表 -->
     <div class="card">
+        <div class="flex items-center justify-between gap-3 px-4 py-3 border-b bg-background">
+            <form method="GET" action="/logs" class="flex items-center gap-2 flex-nowrap">
+                <select id="task-filter" name="task_id" class="sr-only w-44" data-shadcn-select="1" onchange="this.form.submit()">
+                    <option value="">全部任务</option>
+                    {{range .Tasks}}
+                    <option value="{{.ID}}" {{if and $.Logs.TaskID (eq $.Logs.TaskID .ID)}}selected{{end}}>{{.Name}}</option>
+                    {{end}}
+                </select>
+                <select id="status-filter" name="status" class="sr-only w-32" data-shadcn-select="1" onchange="this.form.submit()">
+                    <option value="">全部状态</option>
+                    <option value="success" {{if eq .Logs.Status "success"}}selected{{end}}>成功</option>
+                    <option value="failed" {{if eq .Logs.Status "failed"}}selected{{end}}>失败</option>
+                    <option value="no_match" {{if eq .Logs.Status "no_match"}}selected{{end}}>无匹配</option>
+                </select>
+                <input type="text" name="q" value="{{.Logs.Query}}" class="input h-10 w-72" placeholder="搜索（任务/详情/错误）">
+                <button type="submit" class="btn btn-outline h-10 px-3">搜索</button>
+                {{if or .Logs.Query .Logs.Status .Logs.TaskID}}
+                <a href="/logs" class="btn btn-ghost h-10 px-3">清空</a>
+                {{end}}
+            </form>
+            <div class="text-xs text-muted-foreground whitespace-nowrap">
+                第 {{.Logs.Page}} / {{.Logs.Pages}} 页
+            </div>
+        </div>
         <div class="overflow-x-auto">
             <table class="w-full">
                 <thead class="bg-secondary/50">
@@ -94,7 +89,7 @@
                     </tr>
                 </thead>
                 <tbody id="log-table-body">
-                    {{range .Logs}}
+                    {{range .Logs.Items}}
                     <tr class="border-t hover:bg-secondary/30">
                         <td class="px-5 py-3 whitespace-nowrap">
                             <span class="font-medium">{{.TaskName}}</span>
@@ -130,7 +125,11 @@
                     {{else}}
                     <tr>
                         <td colspan="6" class="px-4 py-8 text-center text-muted-foreground">
+                            {{if or $.Logs.Query $.Logs.Status $.Logs.TaskID}}
+                            未找到匹配的执行日志，<a href="/logs" class="text-primary underline">清空筛选</a>
+                            {{else}}
                             暂无执行日志
+                            {{end}}
                         </td>
                     </tr>
                     {{end}}
@@ -138,28 +137,28 @@
             </table>
         </div>
     </div>
+
+    <div class="flex items-center justify-between -mt-1">
+        <div class="text-xs text-muted-foreground">
+            每页 {{.Logs.PageSize}} 条
+        </div>
+        <div class="flex items-center gap-2">
+            {{if gt .Logs.Page 1}}
+            <a class="btn btn-outline" href="/logs?page={{add .Logs.Page -1}}{{if .Logs.Query}}&q={{.Logs.Query | urlquery}}{{end}}{{if .Logs.Status}}&status={{.Logs.Status | urlquery}}{{end}}{{if .Logs.TaskID}}&task_id={{.Logs.TaskID | urlquery}}{{end}}">上一页</a>
+            {{else}}
+            <button class="btn btn-outline" disabled>上一页</button>
+            {{end}}
+
+            {{if lt .Logs.Page .Logs.Pages}}
+            <a class="btn btn-outline" href="/logs?page={{add .Logs.Page 1}}{{if .Logs.Query}}&q={{.Logs.Query | urlquery}}{{end}}{{if .Logs.Status}}&status={{.Logs.Status | urlquery}}{{end}}{{if .Logs.TaskID}}&task_id={{.Logs.TaskID | urlquery}}{{end}}">下一页</a>
+            {{else}}
+            <button class="btn btn-outline" disabled>下一页</button>
+            {{end}}
+        </div>
+    </div>
 </div>
 
 <script>
-function filterLogs() {
-    const taskId = document.getElementById('task-filter').value;
-    let url = '/api/logs?limit=100';
-    if (taskId) {
-        url += '&task_id=' + taskId;
-    }
-
-    fetch(url)
-        .then(res => res.json())
-        .then(logs => {
-            renderLogs(logs);
-        })
-        .catch(err => showToast('加载失败', 'error'));
-}
-
-function refreshLogs() {
-    location.reload();
-}
-
 function clearLogs() {
     if (!confirm('确定要清空全部执行日志吗？')) {
         return;
@@ -174,52 +173,6 @@ function clearLogs() {
             setTimeout(() => location.reload(), 600);
         })
         .catch(err => showToast('清理失败: ' + err.message, 'error'));
-}
-
-function renderLogs(logs) {
-    const tbody = document.getElementById('log-table-body');
-    if (!logs || logs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-muted-foreground">暂无执行日志</td></tr>';
-        return;
-    }
-
-    tbody.innerHTML = logs.map(log => `
-        <tr class="border-t hover:bg-secondary/30">
-            <td class="px-5 py-3 whitespace-nowrap">
-                <span class="font-medium">${log.task_name}</span>
-            </td>
-            <td class="px-5 py-3 whitespace-nowrap">
-                ${log.status === 'success'
-                    ? '<span class="badge badge-success">成功</span>'
-                    : log.status === 'failed'
-                    ? '<span class="badge badge-destructive">失败</span>'
-                    : '<span class="badge badge-warning">无匹配</span>'}
-            </td>
-            <td class="px-5 py-3 text-sm text-muted-foreground whitespace-nowrap">
-                ${formatTime(log.start_time)}
-            </td>
-            <td class="px-5 py-3 text-sm whitespace-nowrap">
-                ${log.duration}ms
-            </td>
-            <td class="px-5 py-3 text-sm whitespace-nowrap">
-                ${log.article_count} / ${log.match_count}
-            </td>
-            <td class="px-5 py-3 text-sm text-muted-foreground whitespace-nowrap">
-                ${log.error ? '<span class="text-red-600">' + log.error + '</span>' : (log.details || '-')}
-            </td>
-        </tr>
-    `).join('');
-}
-
-function formatTime(timeStr) {
-    const date = new Date(timeStr);
-    return date.toLocaleString('zh-CN', {
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    }).replace(/\//g, '-');
 }
 </script>
 {{end}}

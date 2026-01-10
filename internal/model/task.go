@@ -2,9 +2,12 @@ package model
 
 // TaskPrompt 任务提示词配置
 type TaskPrompt struct {
-	Template      string   `toml:"template" json:"template"`                       // default / custom
-	FilterPrompt  string   `toml:"filter_prompt,omitempty" json:"filter_prompt"`   // 用户自定义筛选提示词
-	Keywords      []string `toml:"keywords,omitempty" json:"keywords"`             // 关键词(default模板用)
+	Template       string `toml:"template,omitempty" json:"template"`             // 旧字段：default / custom
+	FilterPrompt   string `toml:"filter_prompt,omitempty" json:"filter_prompt"`   // 旧字段：用户自定义筛选提示词
+	FilterCriteria string `toml:"filter_criteria,omitempty" json:"filter_criteria"` // 新字段：第一阶段筛选条件
+	OutputFormat   string `toml:"output_format,omitempty" json:"output_format"`   // 新字段：第二阶段输出格式（单篇文章）
+
+	Keywords      []string `toml:"keywords,omitempty" json:"keywords"`             // 关键词(可选，用于摘要补齐关键词)
 	MinImportance int      `toml:"min_importance,omitempty" json:"min_importance"` // 最低重要度(1-5)
 }
 
@@ -52,39 +55,57 @@ type AISelectionResult struct {
 }
 
 // SystemPromptPhase1 第一阶段系统提示词(选择文章)
-const SystemPromptPhase1 = `你是一个专业的新闻筛选助手。你的任务是从RSS文章摘要列表中选择值得深入阅读的文章。
+const SystemPromptPhase1 = `你是一个专业的 RSS 信息筛选助手，目标是“省 token、宁缺毋滥、只挑值得进一步阅读的文章”。
 
-当前你收到的是今日RSS文章的overview(摘要)，包含每篇文章的标题、来源、简短摘要和文章ID。
+你收到的是今日 RSS 文章 overview（可理解为 overview.json 的内容摘要），每篇包含：文章ID、标题、来源、链接、发布时间、摘要。
 
-请根据用户的筛选要求，选择需要进一步阅读完整内容的文章。
-为了节省token：最多选择10篇，宁缺毋滥，只选最相关/最有价值的。
+你的任务：
+1) 严格根据“筛选条件”判断哪些文章值得进入第二阶段（将会读取本地 txt 正文）
+2) 只返回需要进入第二阶段的文章ID
+3) 为了节省 token：最多选择 10 篇，宁缺毋滥；如果不确定价值，就不要选
 
-输出格式（JSON）：
+判断建议（保持克制）：
+- 优先选择：强相关、信息密度高、可落地、影响面大、包含明确的新功能/新版本/关键结论/可复现细节
+- 过滤：纯搬运、营销、重复信息、与筛选条件弱相关、只有标题党没有有效信息
+
+输出格式（必须是 JSON，且只能输出 JSON）：
 {
   "selected_articles": ["article_id_1", "article_id_2"],
-  "reason": "选择这些文章的理由"
+  "reason": "为什么选择这些文章（中文，简洁，1-3句）"
 }
 
 如果没有符合条件的文章，返回空数组：
 {
   "selected_articles": [],
-  "reason": "没有找到符合条件的文章"
+  "reason": "没有找到符合条件的文章（中文，简洁）"
 }`
 
 // SystemPromptPhase2 第二阶段系统提示词(分析内容)
-const SystemPromptPhase2 = `你是一个专业的新闻分析助手。你的任务是分析文章的完整内容，并生成结构化的摘要报告。
+const SystemPromptPhase2 = `你是一个专业的文章分析与摘要助手。你会收到多篇文章的“本地正文 txt”（已按 newsreader 风格拼接）。
 
-请根据用户的筛选要求，分析文章内容并评估其重要性。
-重要性评分请保持克制：只有“确实重大/强相关/高影响”的内容才给5分。
-为了节省token：最终最多输出5篇最相关的文章，按相关性/重要性排序；其他忽略。
+你的任务：
+1) 逐篇阅读正文，重新核对是否满足“筛选条件”（第二阶段仍可剔除不匹配的）
+2) 对匹配的文章逐篇给出：中文概述、重要性评分、关键词等
+3) 为了节省 token：最终最多输出 5 篇最相关的文章，按相关性/重要性排序；其余忽略
 
-输出格式（JSON）：
+重要性评分（1-5）务必克制：
+- 5：重大进展/强相关/高影响，且信息明确
+- 4：明显重要，有实质细节或明确改动
+- 3：有价值但影响较小或细节一般
+- 1-2：相关性弱或价值有限（一般不建议输出）
+
+中文概述要求：
+- 不要出现“中文概述（100字内）”这类字样
+- 不要用“...”省略号；需要把关键信息讲完整
+- 建议 150-300 字，包含关键结论与关键点（邮件会展示完整概述；其他渠道会自动裁剪到更短）
+
+输出格式（必须是 JSON，且只能输出 JSON）：
 {
   "has_content": true/false,
   "items": [
     {
       "title": "文章原始标题(不要改写)",
-      "summary": "中文概述(100字以内，包含重点与关键词)",
+      "summary": "中文概述（完整版本，用于邮件等展示）",
       "importance": 1-5,
       "keywords": ["关键词1", "关键词2", "关键词3"],
       "source": "来源(原始信息源名称)",
@@ -103,3 +124,14 @@ const DefaultFilterPrompt = `筛选要求：
 - 最低重要性：{min_importance}分(1-5分)
 
 请选择与关键词高度相关且重要性达标的内容。`
+
+// DefaultTaskOutputFormat 默认“输出格式”（供 UI/迁移使用）
+const DefaultTaskOutputFormat = `请对每篇符合条件的文章输出一个 JSON item，字段要求：
+- title：原始标题
+- summary：中文概述（完整版本，不要省略号）
+- importance：1-5（克制评分）
+- keywords：3-5个关键词
+- source：信息来源
+- link：原文链接
+- article_id：文章ID（如果已知）
+- published_at：发布时间（上海时区，格式 2006-01-02 15:04）`

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/echofeed/echofeed/internal/model"
@@ -27,6 +28,7 @@ func (m *Manager) EnsureDataDir() error {
 		filepath.Join(m.DataDir, "logs", "tasks"),
 		filepath.Join(m.DataDir, "state"),
 		filepath.Join(m.DataDir, "state", "tasks"),
+		filepath.Join(m.DataDir, "state", "feeds"),
 	}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0755); err != nil {
@@ -102,7 +104,56 @@ func (m *Manager) LoadTasks() (*model.TaskConfig, error) {
 	if _, err := toml.DecodeFile(path, &cfg); err != nil {
 		return nil, err
 	}
+
+	// 兼容旧版任务配置：自动迁移到 filter_criteria / output_format
+	if migrateTaskConfig(&cfg) {
+		_ = m.SaveTasks(&cfg)
+	}
 	return &cfg, nil
+}
+
+func migrateTaskConfig(cfg *model.TaskConfig) bool {
+	if cfg == nil || len(cfg.Tasks) == 0 {
+		return false
+	}
+
+	changed := false
+	for i := range cfg.Tasks {
+		t := cfg.Tasks[i]
+
+		// 默认最低重要度保持 3（与历史一致）
+		if t.Prompt.MinImportance == 0 {
+			t.Prompt.MinImportance = 3
+			changed = true
+		}
+
+		// 迁移筛选条件：优先使用新字段；否则把旧 filter_prompt 迁移过来
+		if strings.TrimSpace(t.Prompt.FilterCriteria) == "" {
+			if strings.TrimSpace(t.Prompt.FilterPrompt) != "" {
+				t.Prompt.FilterCriteria = t.Prompt.FilterPrompt
+				t.Prompt.FilterPrompt = ""
+				changed = true
+			} else if len(t.Prompt.Keywords) > 0 {
+				t.Prompt.FilterCriteria = "关注关键词：" + strings.Join(t.Prompt.Keywords, "、")
+				changed = true
+			}
+		}
+
+		// 迁移输出格式：为空则补默认模板
+		if strings.TrimSpace(t.Prompt.OutputFormat) == "" {
+			t.Prompt.OutputFormat = model.DefaultTaskOutputFormat
+			changed = true
+		}
+
+		// 旧字段不再写回文件（保持 tasks.toml 干净）
+		if t.Prompt.Template != "" {
+			t.Prompt.Template = ""
+			changed = true
+		}
+
+		cfg.Tasks[i] = t
+	}
+	return changed
 }
 
 // SaveTasks 保存任务配置

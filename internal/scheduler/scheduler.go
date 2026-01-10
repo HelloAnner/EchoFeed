@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
 
@@ -20,6 +21,8 @@ type Scheduler struct {
 	taskEngine *service.TaskEngine
 	cleanupSvc *service.CleanupService
 	jobs       map[string]cron.EntryID
+	rssFetchID cron.EntryID
+	rssSpec    string
 }
 
 // NewScheduler 创建调度器
@@ -50,13 +53,7 @@ func NewScheduler(
 
 // Start 启动调度器
 func (s *Scheduler) Start() {
-	// 添加RSS定时拉取任务(每5分钟)
-	s.cron.AddFunc("*/5 * * * *", func() {
-		log.Info().Msg("Scheduled RSS fetch started")
-		if err := s.feedSvc.FetchAll(); err != nil {
-			log.Error().Err(err).Msg("Scheduled RSS fetch failed")
-		}
-	})
+	s.ReloadRSSFetch()
 
 	// 数据清理任务：每天凌晨 1 点执行，保留最近 7 天
 	s.cron.AddFunc("0 1 * * *", func() {
@@ -83,6 +80,44 @@ func (s *Scheduler) Start() {
 
 	s.cron.Start()
 	log.Info().Msg("Scheduler started")
+}
+
+// ReloadRSSFetch 根据系统设置重新加载 RSS 拉取定时任务
+func (s *Scheduler) ReloadRSSFetch() {
+	if s.rssFetchID != 0 {
+		s.cron.Remove(s.rssFetchID)
+		s.rssFetchID = 0
+	}
+
+	interval := 5
+	settings, err := s.cfgMgr.LoadSettings()
+	if err == nil && settings != nil {
+		if settings.Fetch.DefaultInterval > 0 {
+			interval = settings.Fetch.DefaultInterval
+		}
+	}
+	if interval < 1 {
+		interval = 1
+	}
+	if interval > 60 {
+		interval = 60
+	}
+
+	spec := fmt.Sprintf("*/%d * * * *", interval)
+	entryID, err := s.cron.AddFunc(spec, func() {
+		log.Info().Msg("Scheduled RSS fetch started")
+		if err := s.feedSvc.FetchAll(); err != nil {
+			log.Error().Err(err).Msg("Scheduled RSS fetch failed")
+		}
+	})
+	if err != nil {
+		log.Error().Err(err).Str("spec", spec).Msg("Failed to schedule RSS fetch")
+		return
+	}
+
+	s.rssFetchID = entryID
+	s.rssSpec = spec
+	log.Info().Str("spec", spec).Msg("RSS fetch scheduled")
 }
 
 // Stop 停止调度器

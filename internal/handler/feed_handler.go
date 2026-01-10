@@ -142,3 +142,11 @@ func (h *FeedHandler) Refresh(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "刷新已触发"})
 }
+
+// RefreshAll 手动刷新全部订阅
+func (h *FeedHandler) RefreshAll(c *gin.Context) {
+	go func() {
+		_ = h.feedSvc.FetchAll()
+	}()
+	c.JSON(http.StatusOK, gin.H{"message": "已触发更新全部订阅"})
+}
