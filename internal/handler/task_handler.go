@@ -103,6 +103,7 @@ func (h *TaskHandler) Delete(c *gin.Context) {
 // Run 手动执行任务
 func (h *TaskHandler) Run(c *gin.Context) {
 	id := c.Param("id")
-	h.sched.TriggerTaskRun(id)
-	c.JSON(http.StatusOK, gin.H{"message": "Task triggered"})
+	date := c.Query("date") // 可选日期参数，格式: 2006-01-02
+	h.sched.TriggerTaskRunForDate(id, date)
+	c.JSON(http.StatusOK, gin.H{"message": "Task triggered", "date": date})
 }

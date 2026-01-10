@@ -17,7 +17,8 @@ type BotConfig struct {
 
 // AI Provider类型常量
 const (
-	ProviderOpenAI = "openai"
-	ProviderClaude = "claude"
-	ProviderOllama = "ollama"
+	ProviderOpenAI   = "openai"
+	ProviderClaude   = "claude"
+	ProviderOllama   = "ollama"
+	ProviderDeepSeek = "deepseek"
 )

@@ -17,6 +17,7 @@ import (
 // AIProvider AI服务提供者接口
 type AIProvider interface {
 	Analyze(prompt string, content string) (*model.AIAnalysisResult, error)
+	AnalyzeForSelection(prompt string, content string) (*model.AISelectionResult, error)
 }
 
 // AIService AI服务
@@ -45,6 +46,13 @@ func (s *AIService) GetProvider(name string) AIProvider {
 func (s *AIService) CreateProviderFromBot(bot *model.Bot) AIProvider {
 	switch bot.Provider {
 	case model.ProviderOpenAI:
+		return NewOpenAIProvider(
+			bot.Config["api_key"],
+			bot.Config["model"],
+			bot.Config["base_url"],
+		)
+	case model.ProviderDeepSeek:
+		// DeepSeek uses OpenAI-compatible API
 		return NewOpenAIProvider(
 			bot.Config["api_key"],
 			bot.Config["model"],
@@ -150,6 +158,67 @@ func (p *OpenAIProvider) Analyze(prompt string, content string) (*model.AIAnalys
 	return parseAIResponse(result.Choices[0].Message.Content)
 }
 
+// AnalyzeForSelection 第一阶段分析：选择文章
+func (p *OpenAIProvider) AnalyzeForSelection(prompt string, content string) (*model.AISelectionResult, error) {
+	fullPrompt := fmt.Sprintf("%s\n\n以下是RSS内容:\n%s", prompt, content)
+
+	reqBody := map[string]interface{}{
+		"model": p.model,
+		"messages": []map[string]string{
+			{"role": "user", "content": fullPrompt},
+		},
+		"temperature": 0.3,
+		"max_tokens":  2000,
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", p.baseURL+"/chat/completions", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("OpenAI API error: %s", string(body))
+	}
+
+	var result struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, err
+	}
+
+	if len(result.Choices) == 0 {
+		return nil, fmt.Errorf("no response from OpenAI")
+	}
+
+	return parseSelectionResponse(result.Choices[0].Message.Content)
+}
+
 // ClaudeProvider Claude提供者
 type ClaudeProvider struct {
 	apiKey  string
@@ -231,6 +300,65 @@ func (p *ClaudeProvider) Analyze(prompt string, content string) (*model.AIAnalys
 	return parseAIResponse(result.Content[0].Text)
 }
 
+// AnalyzeForSelection 第一阶段分析：选择文章
+func (p *ClaudeProvider) AnalyzeForSelection(prompt string, content string) (*model.AISelectionResult, error) {
+	fullPrompt := fmt.Sprintf("%s\n\n以下是RSS内容:\n%s", prompt, content)
+
+	reqBody := map[string]interface{}{
+		"model":      p.model,
+		"max_tokens": 2000,
+		"messages": []map[string]string{
+			{"role": "user", "content": fullPrompt},
+		},
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", p.baseURL+"/messages", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-api-key", p.apiKey)
+	req.Header.Set("anthropic-version", "2023-06-01")
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Claude API error: %s", string(body))
+	}
+
+	var result struct {
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, err
+	}
+
+	if len(result.Content) == 0 {
+		return nil, fmt.Errorf("no response from Claude")
+	}
+
+	return parseSelectionResponse(result.Content[0].Text)
+}
+
 // OllamaProvider Ollama提供者
 type OllamaProvider struct {
 	baseURL string
@@ -300,6 +428,55 @@ func (p *OllamaProvider) Analyze(prompt string, content string) (*model.AIAnalys
 	return parseAIResponse(result.Response)
 }
 
+// AnalyzeForSelection 第一阶段分析：选择文章
+func (p *OllamaProvider) AnalyzeForSelection(prompt string, content string) (*model.AISelectionResult, error) {
+	fullPrompt := fmt.Sprintf("%s\n\n以下是RSS内容:\n%s", prompt, content)
+
+	reqBody := map[string]interface{}{
+		"model":  p.model,
+		"prompt": fullPrompt,
+		"stream": false,
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", p.baseURL+"/api/generate", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Ollama API error: %s", string(body))
+	}
+
+	var result struct {
+		Response string `json:"response"`
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, err
+	}
+
+	return parseSelectionResponse(result.Response)
+}
+
 // parseAIResponse 解析AI返回的JSON响应
 func parseAIResponse(content string) (*model.AIAnalysisResult, error) {
 	// 尝试从内容中提取JSON
@@ -351,7 +528,7 @@ func parseSelectionResponse(content string) (*model.AISelectionResult, error) {
 // AnalyzeRaw 原始分析，返回字符串内容
 func AnalyzeRaw(provider AIProvider, systemPrompt, filterPrompt, content string) (string, error) {
 	fullPrompt := fmt.Sprintf("%s\n\n%s", systemPrompt, filterPrompt)
-	result, err := provider.Analyze(fullPrompt, content)
+	_, err := provider.Analyze(fullPrompt, content)
 	if err != nil {
 		return "", err
 	}

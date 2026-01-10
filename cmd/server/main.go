@@ -39,9 +39,10 @@ func main() {
 	taskSvc := service.NewTaskService(cfgMgr)
 	channelSvc := service.NewChannelService(cfgMgr)
 	botSvc := service.NewBotService(cfgMgr)
+	logSvc := service.NewLogService(cfgMgr)
 
 	// 初始化调度器
-	sched := scheduler.NewScheduler(cfgMgr, feedSvc, taskSvc, botSvc, channelSvc)
+	sched := scheduler.NewScheduler(cfgMgr, feedSvc, taskSvc, botSvc, channelSvc, logSvc)
 	sched.Start()
 	defer sched.Stop()
 
@@ -53,11 +54,13 @@ func main() {
 	r.Static("/static", "./web/static")
 
 	// 初始化Handler
-	pageHandler := handler.NewPageHandler(cfgMgr, feedSvc, taskSvc, channelSvc, botSvc)
+	pageHandler := handler.NewPageHandler(cfgMgr, feedSvc, taskSvc, channelSvc, botSvc, logSvc)
 	feedHandler := handler.NewFeedHandler(feedSvc, sched)
 	taskHandler := handler.NewTaskHandler(taskSvc, sched)
 	channelHandler := handler.NewChannelHandler(channelSvc)
 	botHandler := handler.NewBotHandler(botSvc)
+	logHandler := handler.NewLogHandler(logSvc)
+	settingsHandler := handler.NewSettingsHandler(cfgMgr)
 
 	// 页面路由
 	r.GET("/", pageHandler.Index)
@@ -109,6 +112,15 @@ func main() {
 		api.PUT("/bots/:id", botHandler.Update)
 		api.DELETE("/bots/:id", botHandler.Delete)
 		api.POST("/bots/:id/test", botHandler.Test)
+
+		// Log API
+		api.GET("/logs", logHandler.List)
+		api.GET("/logs/stats", logHandler.GetStats)
+		api.GET("/logs/stats/today", logHandler.GetStatsToday)
+
+		// Settings API
+		api.GET("/settings", settingsHandler.Get)
+		api.PUT("/settings", settingsHandler.Update)
 	}
 
 	// 启动服务器

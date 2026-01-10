@@ -1,0 +1,232 @@
+{{define "page_bots"}}
+{{if or (eq $.Title "添加机器人") (eq $.Title "机器人详情")}}
+<!-- Bot Form -->
+<div class="max-w-2xl">
+    <div class="card p-6">
+        <form id="bot-form" onsubmit="saveBot(event)">
+            <input type="hidden" id="bot-id" value="{{if .Data}}{{.Data.ID}}{{end}}">
+
+            <div class="space-y-6">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">机器人名称 *</label>
+                        <input type="text" id="bot-name" value="{{if .Data}}{{.Data.Name}}{{end}}" class="input" required>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">AI 服务提供商 *</label>
+                        <select id="bot-provider" class="input" required onchange="toggleBotConfig()">
+                            <option value="">请选择提供商</option>
+                            <option value="openai" {{if and .Data (eq .Data.Provider "openai")}}selected{{end}}>OpenAI</option>
+                            <option value="claude" {{if and .Data (eq .Data.Provider "claude")}}selected{{end}}>Claude (Anthropic)</option>
+                            <option value="ollama" {{if and .Data (eq .Data.Provider "ollama")}}selected{{end}}>Ollama (本地)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <label class="text-sm font-medium">备注</label>
+                    <input type="text" id="bot-remark" value="{{if .Data}}{{.Data.Remark}}{{end}}" class="input">
+                </div>
+
+                <!-- OpenAI Config -->
+                <div id="config-openai" class="space-y-4 hidden border-t pt-6">
+                    <h4 class="font-medium">OpenAI 配置</h4>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">API Key *</label>
+                        <input type="password" id="openai-api-key" value="{{if .Data}}{{index .Data.Config "api_key"}}{{end}}" class="input font-mono text-sm">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">模型</label>
+                        <input type="text" id="openai-model" value="{{if .Data}}{{index .Data.Config "model"}}{{else}}gpt-4o-mini{{end}}" placeholder="gpt-4o-mini" class="input">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Base URL (可选)</label>
+                        <input type="url" id="openai-base-url" value="{{if .Data}}{{index .Data.Config "base_url"}}{{end}}" placeholder="https://api.openai.com/v1" class="input">
+                    </div>
+                </div>
+
+                <!-- Claude Config -->
+                <div id="config-claude" class="space-y-4 hidden border-t pt-6">
+                    <h4 class="font-medium">Claude 配置</h4>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">API Key *</label>
+                        <input type="password" id="claude-api-key" value="{{if .Data}}{{index .Data.Config "api_key"}}{{end}}" class="input font-mono text-sm">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">模型</label>
+                        <input type="text" id="claude-model" value="{{if .Data}}{{index .Data.Config "model"}}{{else}}claude-sonnet-4-20250514{{end}}" placeholder="claude-sonnet-4-20250514" class="input">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Base URL (可选)</label>
+                        <input type="url" id="claude-base-url" value="{{if .Data}}{{index .Data.Config "base_url"}}{{end}}" placeholder="https://api.anthropic.com/v1" class="input">
+                    </div>
+                </div>
+
+                <!-- Ollama Config -->
+                <div id="config-ollama" class="space-y-4 hidden border-t pt-6">
+                    <h4 class="font-medium">Ollama 配置</h4>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Base URL</label>
+                        <input type="url" id="ollama-base-url" value="{{if .Data}}{{index .Data.Config "base_url"}}{{else}}http://localhost:11434{{end}}" placeholder="http://localhost:11434" class="input">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">模型</label>
+                        <input type="text" id="ollama-model" value="{{if .Data}}{{index .Data.Config "model"}}{{else}}llama3{{end}}" placeholder="llama3" class="input">
+                    </div>
+                </div>
+
+                <div class="border-t pt-6">
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" id="bot-enabled" class="rounded border-gray-300" {{if or (not .Data) .Data.Enabled}}checked{{end}}>
+                        <span class="text-sm font-medium">启用机器人</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="mt-8 flex justify-end gap-3">
+                <a href="/bots" class="btn btn-outline">取消</a>
+                <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function toggleBotConfig() {
+    const provider = document.getElementById('bot-provider').value;
+    document.getElementById('config-openai').classList.add('hidden');
+    document.getElementById('config-claude').classList.add('hidden');
+    document.getElementById('config-ollama').classList.add('hidden');
+    if (provider) {
+        document.getElementById('config-' + provider).classList.remove('hidden');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    toggleBotConfig();
+});
+
+function saveBot(e) {
+    e.preventDefault();
+    const id = document.getElementById('bot-id').value;
+    const provider = document.getElementById('bot-provider').value;
+
+    let config = {};
+    if (provider === 'openai') {
+        config = {
+            api_key: document.getElementById('openai-api-key').value,
+            model: document.getElementById('openai-model').value,
+            base_url: document.getElementById('openai-base-url').value
+        };
+    } else if (provider === 'claude') {
+        config = {
+            api_key: document.getElementById('claude-api-key').value,
+            model: document.getElementById('claude-model').value,
+            base_url: document.getElementById('claude-base-url').value
+        };
+    } else if (provider === 'ollama') {
+        config = {
+            base_url: document.getElementById('ollama-base-url').value,
+            model: document.getElementById('ollama-model').value
+        };
+    }
+
+    const bot = {
+        name: document.getElementById('bot-name').value,
+        provider: provider,
+        remark: document.getElementById('bot-remark').value,
+        config: config,
+        enabled: document.getElementById('bot-enabled').checked
+    };
+
+    const method = id ? 'PUT' : 'POST';
+    const url = id ? '/api/bots/' + id : '/api/bots';
+
+    fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bot)
+    })
+    .then(res => {
+        if (!res.ok) throw new Error('Save failed');
+        return res.json();
+    })
+    .then(data => {
+        showToast('保存成功');
+        setTimeout(() => location.href = '/bots', 1000);
+    })
+    .catch(err => showToast('保存失败: ' + err.message, 'error'));
+}
+</script>
+{{else}}
+<!-- Bot List -->
+<div class="space-y-4">
+    <div class="flex items-center justify-between">
+        <p class="text-sm text-muted-foreground">配置 AI 机器人</p>
+        <a href="/bots/new" class="btn btn-primary">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            添加机器人
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {{range .Bots}}
+        <div class="card p-5">
+            <div class="flex items-start justify-between mb-3">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-secondary rounded-lg">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="font-medium">{{.Name}}</h3>
+                        <p class="text-sm text-muted-foreground">{{.Provider}}</p>
+                    </div>
+                </div>
+                {{if .Enabled}}
+                <span class="badge badge-success">启用</span>
+                {{else}}
+                <span class="badge badge-muted">禁用</span>
+                {{end}}
+            </div>
+            <p class="text-sm text-muted-foreground mb-4">{{.Remark}}</p>
+            <div class="flex gap-2">
+                <button onclick="testBot('{{.ID}}')" class="btn btn-outline flex-1 text-sm">测试</button>
+                <a href="/bots/{{.ID}}" class="btn btn-outline flex-1 text-sm">编辑</a>
+                <button onclick="deleteBot('{{.ID}}')" class="btn btn-ghost p-2 text-destructive">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        {{else}}
+        <div class="col-span-full text-center py-12 text-muted-foreground">
+            暂无 AI 机器人，<a href="/bots/new" class="text-primary underline">点击添加</a>
+        </div>
+        {{end}}
+    </div>
+</div>
+
+<script>
+function testBot(id) {
+    fetch('/api/bots/' + id + '/test', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => showToast('AI 测试成功'))
+        .catch(err => showToast('测试失败', 'error'));
+}
+
+function deleteBot(id) {
+    if (confirm('确定要删除这个机器人吗？')) {
+        fetch('/api/bots/' + id, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(data => location.reload())
+            .catch(err => showToast('删除失败', 'error'));
+    }
+}
+</script>
+{{end}}
+{{end}}

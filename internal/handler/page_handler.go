@@ -18,12 +18,16 @@ type PageHandler struct {
 	taskSvc    *service.TaskService
 	channelSvc *service.ChannelService
 	botSvc     *service.BotService
+	logSvc     *service.LogService
 	templates  *template.Template
 }
 
 // NewPageHandler 创建页面处理器
-func NewPageHandler(cfgMgr *config.Manager, feedSvc *service.FeedService, taskSvc *service.TaskService, channelSvc *service.ChannelService, botSvc *service.BotService) *PageHandler {
+func NewPageHandler(cfgMgr *config.Manager, feedSvc *service.FeedService, taskSvc *service.TaskService, channelSvc *service.ChannelService, botSvc *service.BotService, logSvc *service.LogService) *PageHandler {
+	// 加载所有模板文件（包含子目录）
 	tmpl := template.Must(template.ParseGlob(filepath.Join("web", "templates", "*.html")))
+	template.Must(tmpl.ParseGlob(filepath.Join("web", "templates", "components", "*.html")))
+	template.Must(tmpl.ParseGlob(filepath.Join("web", "templates", "pages", "*.html")))
 
 	return &PageHandler{
 		cfgMgr:     cfgMgr,
@@ -31,6 +35,7 @@ func NewPageHandler(cfgMgr *config.Manager, feedSvc *service.FeedService, taskSv
 		taskSvc:    taskSvc,
 		channelSvc: channelSvc,
 		botSvc:     botSvc,
+		logSvc:     logSvc,
 		templates:  tmpl,
 	}
 }
@@ -44,6 +49,8 @@ type PageData struct {
 	Tasks    interface{}
 	Channels interface{}
 	Bots     interface{}
+	Logs     interface{}
+	Stats    interface{}
 }
 
 func (h *PageHandler) render(c *gin.Context, tmpl string, data PageData) {
@@ -197,9 +204,17 @@ func (h *PageHandler) BotDetail(c *gin.Context) {
 
 // Logs 日志页
 func (h *PageHandler) Logs(c *gin.Context) {
+	logs, _ := h.logSvc.List(100)
+	stats, _ := h.logSvc.GetStats()
+	statsToday, _ := h.logSvc.GetStatsToday()
+	tasks, _ := h.taskSvc.List()
+
 	h.render(c, "layout.html", PageData{
 		Title:  "执行日志",
 		Active: "logs",
+		Logs:   logs,
+		Stats:  map[string]interface{}{"all": stats, "today": statsToday},
+		Tasks:  tasks,
 	})
 }
 

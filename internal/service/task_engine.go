@@ -19,6 +19,7 @@ type TaskEngine struct {
 	taskSvc    *TaskService
 	botSvc     *BotService
 	channelSvc *ChannelService
+	logSvc     *LogService
 	aiSvc      *AIService
 	notifier   *NotifierService
 }
@@ -30,6 +31,7 @@ func NewTaskEngine(
 	taskSvc *TaskService,
 	botSvc *BotService,
 	channelSvc *ChannelService,
+	logSvc *LogService,
 ) *TaskEngine {
 	return &TaskEngine{
 		cfgMgr:     cfgMgr,
@@ -37,6 +39,7 @@ func NewTaskEngine(
 		taskSvc:    taskSvc,
 		botSvc:     botSvc,
 		channelSvc: channelSvc,
+		logSvc:     logSvc,
 		aiSvc:      NewAIService(),
 		notifier:   NewNotifierService(),
 	}
@@ -44,6 +47,13 @@ func NewTaskEngine(
 
 // ExecuteTask 执行任务(两阶段AI分析)
 func (e *TaskEngine) ExecuteTask(taskID string) error {
+	return e.ExecuteTaskForDate(taskID, time.Now().Format("2006-01-02"))
+}
+
+// ExecuteTaskForDate 执行任务(指定日期)
+func (e *TaskEngine) ExecuteTaskForDate(taskID string, date string) error {
+	startTime := time.Now()
+
 	// 获取任务
 	task, err := e.taskSvc.Get(taskID)
 	if err != nil {
@@ -58,37 +68,67 @@ func (e *TaskEngine) ExecuteTask(taskID string) error {
 		return nil
 	}
 
-	log.Info().Str("task", task.Name).Msg("Executing task")
+	log.Info().Str("task", task.Name).Str("date", date).Msg("Executing task")
+
+	// 创建执行日志
+	execLog := &model.ExecutionLog{
+		TaskID:    task.ID,
+		TaskName:  task.Name,
+		StartTime: startTime,
+		Status:    model.LogStatusSuccess,
+	}
+
+	// 使用defer记录日志
+	defer func() {
+		execLog.EndTime = time.Now()
+		execLog.Duration = execLog.EndTime.Sub(execLog.StartTime).Milliseconds()
+		if e.logSvc != nil {
+			e.logSvc.Create(execLog)
+		}
+	}()
 
 	// 获取AI机器人
 	bot, err := e.botSvc.Get(task.BotID)
 	if err != nil {
+		execLog.Status = model.LogStatusFailed
+		execLog.Error = err.Error()
 		return fmt.Errorf("failed to get bot: %w", err)
 	}
 	if bot == nil {
+		execLog.Status = model.LogStatusFailed
+		execLog.Error = "bot not found"
 		return fmt.Errorf("bot not found: %s", task.BotID)
 	}
 	if !bot.Enabled {
+		execLog.Status = model.LogStatusFailed
+		execLog.Error = "bot is disabled"
 		return fmt.Errorf("bot is disabled: %s", bot.Name)
 	}
 
 	// 创建AI Provider
 	provider := e.aiSvc.CreateProviderFromBot(bot)
 	if provider == nil {
+		execLog.Status = model.LogStatusFailed
+		execLog.Error = "unsupported provider"
 		return fmt.Errorf("unsupported provider: %s", bot.Provider)
 	}
 
-	// 获取今日overview
-	today := time.Now().Format("2006-01-02")
-	overview, err := e.feedSvc.LoadOverview(today)
+	// 获取指定日期的overview
+	overview, err := e.feedSvc.LoadOverview(date)
 	if err != nil {
-		return fmt.Errorf("failed to load today's overview: %w", err)
+		execLog.Status = model.LogStatusFailed
+		execLog.Error = err.Error()
+		return fmt.Errorf("failed to load overview for %s: %w", date, err)
 	}
 
 	if overview == nil || len(overview.Articles) == 0 {
-		log.Warn().Str("task", task.Name).Msg("No RSS content available for today")
+		log.Warn().Str("task", task.Name).Str("date", date).Msg("No RSS content available")
+		execLog.Status = model.LogStatusNoMatch
+		execLog.Details = "No RSS content available"
 		return nil
 	}
+
+	execLog.ArticleCount = len(overview.Articles)
 
 	// 构建筛选提示词
 	filterPrompt := e.buildFilterPrompt(task)
@@ -99,16 +139,20 @@ func (e *TaskEngine) ExecuteTask(taskID string) error {
 	overviewContent := e.buildOverviewContent(overview)
 	phase1Prompt := fmt.Sprintf("%s\n\n%s", model.SystemPromptPhase1, filterPrompt)
 
-	selectionResult, err := provider.Analyze(phase1Prompt, overviewContent)
+	selectionResult, err := provider.AnalyzeForSelection(phase1Prompt, overviewContent)
 	if err != nil {
 		log.Error().Err(err).Str("task", task.Name).Msg("Phase 1 analysis failed")
+		execLog.Status = model.LogStatusFailed
+		execLog.Error = err.Error()
 		return fmt.Errorf("phase 1 analysis failed: %w", err)
 	}
 
 	// 从分析结果中提取选中的文章ID
-	selectedIDs := e.extractSelectedIDs(selectionResult)
+	selectedIDs := selectionResult.SelectedArticles
 	if len(selectedIDs) == 0 {
-		log.Info().Str("task", task.Name).Msg("No articles selected in phase 1")
+		log.Info().Str("task", task.Name).Str("reason", selectionResult.Reason).Msg("No articles selected in phase 1")
+		execLog.Status = model.LogStatusNoMatch
+		execLog.Details = "No articles selected in phase 1: " + selectionResult.Reason
 		return nil
 	}
 
@@ -118,9 +162,11 @@ func (e *TaskEngine) ExecuteTask(taskID string) error {
 	log.Info().Str("task", task.Name).Msg("Phase 2: Analyzing selected articles")
 
 	// 加载选中文章的完整内容
-	fullContent := e.loadSelectedArticlesContent(today, selectedIDs, overview)
+	fullContent := e.loadSelectedArticlesContent(date, selectedIDs, overview)
 	if fullContent == "" {
 		log.Warn().Str("task", task.Name).Msg("Failed to load selected articles content")
+		execLog.Status = model.LogStatusNoMatch
+		execLog.Details = "Failed to load content"
 		return nil
 	}
 
@@ -129,15 +175,20 @@ func (e *TaskEngine) ExecuteTask(taskID string) error {
 	analysisResult, err := provider.Analyze(phase2Prompt, fullContent)
 	if err != nil {
 		log.Error().Err(err).Str("task", task.Name).Msg("Phase 2 analysis failed")
+		execLog.Status = model.LogStatusFailed
+		execLog.Error = err.Error()
 		return fmt.Errorf("phase 2 analysis failed: %w", err)
 	}
 
 	// 检查是否有匹配内容
 	if !analysisResult.HasContent || len(analysisResult.Items) == 0 {
 		log.Info().Str("task", task.Name).Msg("No matching content found after detailed analysis")
+		execLog.Status = model.LogStatusNoMatch
+		execLog.Details = "No matching content"
 		return nil
 	}
 
+	execLog.MatchCount = len(analysisResult.Items)
 	log.Info().Str("task", task.Name).Int("items", len(analysisResult.Items)).Msg("Found matching content")
 
 	// 发送通知

@@ -19,6 +19,7 @@
                             <option value="telegram" {{if and .Data (eq .Data.Type "telegram")}}selected{{end}}>Telegram</option>
                             <option value="webhook" {{if and .Data (eq .Data.Type "webhook")}}selected{{end}}>Webhook</option>
                             <option value="bark" {{if and .Data (eq .Data.Type "bark")}}selected{{end}}>Bark</option>
+                            <option value="email" {{if and .Data (eq .Data.Type "email")}}selected{{end}}>Email</option>
                         </select>
                     </div>
                 </div>
@@ -45,8 +46,15 @@
                 <div id="config-webhook" class="space-y-4 hidden border-t pt-6">
                     <h4 class="font-medium">Webhook 配置</h4>
                     <div class="space-y-2">
+                        <label class="text-sm font-medium">Webhook 类型</label>
+                        <select id="webhook-type" class="input">
+                            <option value="wecom" {{if and .Data (eq (index .Data.Config "webhook_type") "wecom")}}selected{{end}}>企业微信 (Markdown)</option>
+                            <option value="custom" {{if and .Data (eq (index .Data.Config "webhook_type") "custom")}}selected{{end}}>自定义</option>
+                        </select>
+                    </div>
+                    <div class="space-y-2">
                         <label class="text-sm font-medium">URL *</label>
-                        <input type="url" id="webhook-url" value="{{if .Data}}{{index .Data.Config "url"}}{{end}}" class="input">
+                        <input type="url" id="webhook-url" value="{{if .Data}}{{index .Data.Config "url"}}{{end}}" class="input" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx">
                     </div>
                     <div class="space-y-2">
                         <label class="text-sm font-medium">HTTP 方法</label>
@@ -54,6 +62,25 @@
                             <option value="POST" {{if and .Data (eq (index .Data.Config "method") "POST")}}selected{{end}}>POST</option>
                             <option value="PUT" {{if and .Data (eq (index .Data.Config "method") "PUT")}}selected{{end}}>PUT</option>
                         </select>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">消息模板 (可选)</label>
+                        <textarea id="webhook-body-template" rows="6" class="input font-mono text-sm" placeholder="留空使用默认模板，或输入自定义模板...">{{if .Data}}{{index .Data.Config "body_template"}}{{end}}</textarea>
+                        <div class="text-xs text-muted-foreground space-y-1 mt-2">
+                            <p class="font-medium">可用模板参数:</p>
+                            <div class="grid grid-cols-2 gap-x-4 gap-y-1 mt-1">
+                                <code class="bg-secondary px-1 rounded">{{"{{"}}task_name{{"}}"}}</code><span>任务名称</span>
+                                <code class="bg-secondary px-1 rounded">{{"{{"}}task_id{{"}}"}}</code><span>任务ID</span>
+                                <code class="bg-secondary px-1 rounded">{{"{{"}}timestamp{{"}}"}}</code><span>执行时间</span>
+                                <code class="bg-secondary px-1 rounded">{{"{{"}}date{{"}}"}}</code><span>日期</span>
+                                <code class="bg-secondary px-1 rounded">{{"{{"}}count{{"}}"}}</code><span>匹配数量</span>
+                                <code class="bg-secondary px-1 rounded">{{"{{"}}ai_output{{"}}"}}</code><span>AI完整输出</span>
+                                <code class="bg-secondary px-1 rounded">{{"{{"}}title_list{{"}}"}}</code><span>标题列表</span>
+                                <code class="bg-secondary px-1 rounded">{{"{{"}}first_title{{"}}"}}</code><span>第一条标题</span>
+                                <code class="bg-secondary px-1 rounded">{{"{{"}}first_summary{{"}}"}}</code><span>第一条摘要</span>
+                                <code class="bg-secondary px-1 rounded">{{"{{"}}first_link{{"}}"}}</code><span>第一条链接</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -68,6 +95,45 @@
                         <label class="text-sm font-medium">Server URL (可选)</label>
                         <input type="url" id="bark-server-url" value="{{if .Data}}{{index .Data.Config "server_url"}}{{end}}" placeholder="https://api.day.app" class="input">
                     </div>
+                </div>
+
+                <!-- Email Config -->
+                <div id="config-email" class="space-y-4 hidden border-t pt-6">
+                    <h4 class="font-medium">Email 配置</h4>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium">SMTP 服务器 *</label>
+                            <input type="text" id="email-smtp-host" value="{{if .Data}}{{index .Data.Config "smtp_host"}}{{end}}" placeholder="smtp.gmail.com" class="input">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium">端口 *</label>
+                            <input type="text" id="email-smtp-port" value="{{if .Data}}{{index .Data.Config "smtp_port"}}{{else}}587{{end}}" placeholder="587" class="input">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium">用户名</label>
+                            <input type="text" id="email-username" value="{{if .Data}}{{index .Data.Config "username"}}{{end}}" class="input">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium">密码/授权码</label>
+                            <input type="password" id="email-password" value="{{if .Data}}{{index .Data.Config "password"}}{{end}}" class="input">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium">发件人</label>
+                            <input type="email" id="email-from" value="{{if .Data}}{{index .Data.Config "from"}}{{end}}" placeholder="noreply@example.com" class="input">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium">收件人 *</label>
+                            <input type="email" id="email-to" value="{{if .Data}}{{index .Data.Config "to"}}{{end}}" placeholder="user@example.com" class="input">
+                        </div>
+                    </div>
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" id="email-use-tls" class="rounded border-gray-300" {{if and .Data (eq (index .Data.Config "use_tls") "true")}}checked{{end}}>
+                        <span class="text-sm">使用 SSL/TLS (端口465)</span>
+                    </label>
                 </div>
 
                 <div class="border-t pt-6">
@@ -92,6 +158,7 @@ function toggleChannelConfig() {
     document.getElementById('config-telegram').classList.add('hidden');
     document.getElementById('config-webhook').classList.add('hidden');
     document.getElementById('config-bark').classList.add('hidden');
+    document.getElementById('config-email').classList.add('hidden');
     if (type) {
         document.getElementById('config-' + type).classList.remove('hidden');
     }
@@ -114,13 +181,25 @@ function saveChannel(e) {
         };
     } else if (type === 'webhook') {
         config = {
+            webhook_type: document.getElementById('webhook-type').value,
             url: document.getElementById('webhook-url').value,
-            method: document.getElementById('webhook-method').value
+            method: document.getElementById('webhook-method').value,
+            body_template: document.getElementById('webhook-body-template').value
         };
     } else if (type === 'bark') {
         config = {
             device_key: document.getElementById('bark-device-key').value,
             server_url: document.getElementById('bark-server-url').value
+        };
+    } else if (type === 'email') {
+        config = {
+            smtp_host: document.getElementById('email-smtp-host').value,
+            smtp_port: document.getElementById('email-smtp-port').value,
+            username: document.getElementById('email-username').value,
+            password: document.getElementById('email-password').value,
+            from: document.getElementById('email-from').value,
+            to: document.getElementById('email-to').value,
+            use_tls: document.getElementById('email-use-tls').checked ? 'true' : 'false'
         };
     }
 

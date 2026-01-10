@@ -1,0 +1,162 @@
+{{define "page_settings"}}
+<div class="max-w-2xl">
+    <div class="card p-6">
+        <h2 class="text-lg font-semibold mb-6">系统设置</h2>
+        <form id="settings-form" onsubmit="saveSettings(event)" class="space-y-6">
+            <!-- 服务器设置 -->
+            <div class="border-b pb-4">
+                <h3 class="font-medium mb-4">服务器设置</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">监听地址</label>
+                        <input type="text" id="server-host" value="{{if .Data}}{{.Data.Server.Host}}{{else}}0.0.0.0{{end}}" class="input">
+                        <p class="text-xs text-muted-foreground">如: 0.0.0.0 或 127.0.0.1</p>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">服务端口</label>
+                        <input type="number" id="server-port" value="{{if .Data}}{{.Data.Server.Port}}{{else}}8080{{end}}" class="input">
+                        <p class="text-xs text-muted-foreground">需重启生效</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RSS 拉取设置 -->
+            <div class="border-b pb-4">
+                <h3 class="font-medium mb-4">RSS 拉取设置</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">默认拉取间隔 (分钟)</label>
+                        <input type="number" id="fetch-interval" value="{{if .Data}}{{.Data.Fetch.DefaultInterval}}{{else}}5{{end}}" class="input" min="1">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">请求超时 (秒)</label>
+                        <input type="number" id="fetch-timeout" value="{{if .Data}}{{.Data.Fetch.Timeout}}{{else}}30{{end}}" class="input" min="5">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4 mt-4">
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">最大并发数</label>
+                        <input type="number" id="fetch-concurrent" value="{{if .Data}}{{.Data.Fetch.MaxConcurrent}}{{else}}5{{end}}" class="input" min="1" max="20">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">内容保留天数</label>
+                        <input type="number" id="fetch-retention" value="{{if .Data}}{{.Data.Fetch.RetentionDays}}{{else}}7{{end}}" class="input" min="1">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 日志设置 -->
+            <div class="border-b pb-4">
+                <h3 class="font-medium mb-4">日志设置</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">日志级别</label>
+                        <select id="log-level" class="input">
+                            <option value="debug" {{if and .Data (eq .Data.Log.Level "debug")}}selected{{end}}>Debug</option>
+                            <option value="info" {{if or (not .Data) (eq .Data.Log.Level "info")}}selected{{end}}>Info</option>
+                            <option value="warn" {{if and .Data (eq .Data.Log.Level "warn")}}selected{{end}}>Warn</option>
+                            <option value="error" {{if and .Data (eq .Data.Log.Level "error")}}selected{{end}}>Error</option>
+                        </select>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">单文件大小上限 (MB)</label>
+                        <input type="number" id="log-maxsize" value="{{if .Data}}{{.Data.Log.MaxSizeMB}}{{else}}100{{end}}" class="input" min="1">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4 mt-4">
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">备份文件数量</label>
+                        <input type="number" id="log-backups" value="{{if .Data}}{{.Data.Log.MaxBackups}}{{else}}3{{end}}" class="input" min="1">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 认证设置 -->
+            <div class="pb-4">
+                <h3 class="font-medium mb-4">认证设置</h3>
+                <div class="space-y-4">
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" id="auth-enabled" class="rounded border-gray-300" {{if and .Data .Data.Auth.Enabled}}checked{{end}}>
+                        <span class="text-sm font-medium">启用登录认证</span>
+                    </label>
+                    <div id="auth-fields" class="grid grid-cols-2 gap-4 {{if not (and .Data .Data.Auth.Enabled)}}opacity-50{{end}}">
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium">用户名</label>
+                            <input type="text" id="auth-username" value="{{if .Data}}{{.Data.Auth.Username}}{{else}}admin{{end}}" class="input">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium">新密码</label>
+                            <input type="password" id="auth-password" placeholder="留空保持不变" class="input">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pt-4 flex gap-3">
+                <button type="submit" class="btn btn-primary">保存设置</button>
+                <button type="button" onclick="resetSettings()" class="btn btn-outline">重置</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.getElementById('auth-enabled').addEventListener('change', function() {
+    document.getElementById('auth-fields').classList.toggle('opacity-50', !this.checked);
+});
+
+function saveSettings(e) {
+    e.preventDefault();
+
+    const settings = {
+        server: {
+            host: document.getElementById('server-host').value,
+            port: parseInt(document.getElementById('server-port').value) || 8080
+        },
+        fetch: {
+            default_interval: parseInt(document.getElementById('fetch-interval').value) || 5,
+            timeout: parseInt(document.getElementById('fetch-timeout').value) || 30,
+            max_concurrent: parseInt(document.getElementById('fetch-concurrent').value) || 5,
+            retention_days: parseInt(document.getElementById('fetch-retention').value) || 7
+        },
+        log: {
+            level: document.getElementById('log-level').value,
+            max_size_mb: parseInt(document.getElementById('log-maxsize').value) || 100,
+            max_backups: parseInt(document.getElementById('log-backups').value) || 3
+        },
+        auth: {
+            enabled: document.getElementById('auth-enabled').checked,
+            username: document.getElementById('auth-username').value,
+            password_hash: '' // Will be preserved on server side
+        }
+    };
+
+    // If new password provided, hash it (simplified - in production use proper hashing)
+    const newPassword = document.getElementById('auth-password').value;
+    if (newPassword) {
+        // Simple hash for demo - should use bcrypt in production
+        settings.auth.password_hash = btoa(newPassword);
+    }
+
+    fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
+    })
+    .then(res => {
+        if (!res.ok) throw new Error('Save failed');
+        return res.json();
+    })
+    .then(data => {
+        showToast('设置已保存');
+    })
+    .catch(err => showToast('保存失败: ' + err.message, 'error'));
+}
+
+function resetSettings() {
+    if (confirm('确定要重置为默认设置吗？')) {
+        location.reload();
+    }
+}
+</script>
+{{end}}

@@ -1,0 +1,211 @@
+{{define "page_logs"}}
+<div class="space-y-6">
+    <!-- 统计卡片 -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="card p-4">
+            <div class="text-sm text-muted-foreground">今日执行</div>
+            <div class="text-2xl font-bold mt-1" id="stat-today-total">
+                {{if .Stats}}{{with index .Stats "today"}}{{.TotalExecutions}}{{end}}{{else}}0{{end}}
+            </div>
+        </div>
+        <div class="card p-4">
+            <div class="text-sm text-muted-foreground">今日成功</div>
+            <div class="text-2xl font-bold mt-1 text-green-600" id="stat-today-success">
+                {{if .Stats}}{{with index .Stats "today"}}{{.SuccessCount}}{{end}}{{else}}0{{end}}
+            </div>
+        </div>
+        <div class="card p-4">
+            <div class="text-sm text-muted-foreground">总执行次数</div>
+            <div class="text-2xl font-bold mt-1" id="stat-all-total">
+                {{if .Stats}}{{with index .Stats "all"}}{{.TotalExecutions}}{{end}}{{else}}0{{end}}
+            </div>
+        </div>
+        <div class="card p-4">
+            <div class="text-sm text-muted-foreground">成功率</div>
+            <div class="text-2xl font-bold mt-1" id="stat-success-rate">
+                {{if .Stats}}{{with index .Stats "all"}}{{printf "%.1f" .SuccessRate}}%{{end}}{{else}}0%{{end}}
+            </div>
+        </div>
+    </div>
+
+    <!-- 详细统计 -->
+    <div class="card p-4">
+        <h3 class="font-medium mb-3">执行统计</h3>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+            <div>
+                <span class="text-muted-foreground">成功:</span>
+                <span class="font-medium text-green-600">
+                    {{if .Stats}}{{with index .Stats "all"}}{{.SuccessCount}}{{end}}{{else}}0{{end}}
+                </span>
+            </div>
+            <div>
+                <span class="text-muted-foreground">失败:</span>
+                <span class="font-medium text-red-600">
+                    {{if .Stats}}{{with index .Stats "all"}}{{.FailedCount}}{{end}}{{else}}0{{end}}
+                </span>
+            </div>
+            <div>
+                <span class="text-muted-foreground">无匹配:</span>
+                <span class="font-medium text-yellow-600">
+                    {{if .Stats}}{{with index .Stats "all"}}{{.NoMatchCount}}{{end}}{{else}}0{{end}}
+                </span>
+            </div>
+            <div>
+                <span class="text-muted-foreground">总文章:</span>
+                <span class="font-medium">
+                    {{if .Stats}}{{with index .Stats "all"}}{{.TotalArticles}}{{end}}{{else}}0{{end}}
+                </span>
+            </div>
+            <div>
+                <span class="text-muted-foreground">总匹配:</span>
+                <span class="font-medium">
+                    {{if .Stats}}{{with index .Stats "all"}}{{.TotalMatches}}{{end}}{{else}}0{{end}}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 筛选工具栏 -->
+    <div class="flex items-center gap-4">
+        <select id="task-filter" class="input w-48" onchange="filterLogs()">
+            <option value="">全部任务</option>
+            {{range .Tasks}}
+            <option value="{{.ID}}">{{.Name}}</option>
+            {{end}}
+        </select>
+        <button onclick="refreshLogs()" class="btn btn-outline">
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            刷新
+        </button>
+    </div>
+
+    <!-- 日志列表 -->
+    <div class="card">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-secondary/50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-sm font-medium">任务</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">状态</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">时间</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">耗时</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">文章/匹配</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">详情</th>
+                    </tr>
+                </thead>
+                <tbody id="log-table-body">
+                    {{range .Logs}}
+                    <tr class="border-t hover:bg-secondary/30">
+                        <td class="px-4 py-3">
+                            <span class="font-medium">{{.TaskName}}</span>
+                        </td>
+                        <td class="px-4 py-3">
+                            {{if eq .Status "success"}}
+                            <span class="badge badge-success">成功</span>
+                            {{else if eq .Status "failed"}}
+                            <span class="badge badge-destructive">失败</span>
+                            {{else}}
+                            <span class="badge badge-warning">无匹配</span>
+                            {{end}}
+                        </td>
+                        <td class="px-4 py-3 text-sm text-muted-foreground">
+                            {{.StartTime.Format "01-02 15:04:05"}}
+                        </td>
+                        <td class="px-4 py-3 text-sm">
+                            {{.Duration}}ms
+                        </td>
+                        <td class="px-4 py-3 text-sm">
+                            {{.ArticleCount}} / {{.MatchCount}}
+                        </td>
+                        <td class="px-4 py-3 text-sm text-muted-foreground">
+                            {{if .Error}}
+                            <span class="text-red-600" title="{{.Error}}">{{.Error}}</span>
+                            {{else if .Details}}
+                            {{.Details}}
+                            {{else}}
+                            -
+                            {{end}}
+                        </td>
+                    </tr>
+                    {{else}}
+                    <tr>
+                        <td colspan="6" class="px-4 py-8 text-center text-muted-foreground">
+                            暂无执行日志
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+function filterLogs() {
+    const taskId = document.getElementById('task-filter').value;
+    let url = '/api/logs?limit=100';
+    if (taskId) {
+        url += '&task_id=' + taskId;
+    }
+
+    fetch(url)
+        .then(res => res.json())
+        .then(logs => {
+            renderLogs(logs);
+        })
+        .catch(err => showToast('加载失败', 'error'));
+}
+
+function refreshLogs() {
+    location.reload();
+}
+
+function renderLogs(logs) {
+    const tbody = document.getElementById('log-table-body');
+    if (!logs || logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-muted-foreground">暂无执行日志</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = logs.map(log => `
+        <tr class="border-t hover:bg-secondary/30">
+            <td class="px-4 py-3">
+                <span class="font-medium">${log.task_name}</span>
+            </td>
+            <td class="px-4 py-3">
+                ${log.status === 'success'
+                    ? '<span class="badge badge-success">成功</span>'
+                    : log.status === 'failed'
+                    ? '<span class="badge badge-destructive">失败</span>'
+                    : '<span class="badge badge-warning">无匹配</span>'}
+            </td>
+            <td class="px-4 py-3 text-sm text-muted-foreground">
+                ${formatTime(log.start_time)}
+            </td>
+            <td class="px-4 py-3 text-sm">
+                ${log.duration}ms
+            </td>
+            <td class="px-4 py-3 text-sm">
+                ${log.article_count} / ${log.match_count}
+            </td>
+            <td class="px-4 py-3 text-sm text-muted-foreground">
+                ${log.error ? '<span class="text-red-600">' + log.error + '</span>' : (log.details || '-')}
+            </td>
+        </tr>
+    `).join('');
+}
+
+function formatTime(timeStr) {
+    const date = new Date(timeStr);
+    return date.toLocaleString('zh-CN', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    }).replace(/\//g, '-');
+}
+</script>
+{{end}}

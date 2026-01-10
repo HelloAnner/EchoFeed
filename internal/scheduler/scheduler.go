@@ -16,6 +16,7 @@ type Scheduler struct {
 	taskSvc    *service.TaskService
 	botSvc     *service.BotService
 	channelSvc *service.ChannelService
+	logSvc     *service.LogService
 	taskEngine *service.TaskEngine
 	jobs       map[string]cron.EntryID
 }
@@ -27,8 +28,9 @@ func NewScheduler(
 	taskSvc *service.TaskService,
 	botSvc *service.BotService,
 	channelSvc *service.ChannelService,
+	logSvc *service.LogService,
 ) *Scheduler {
-	taskEngine := service.NewTaskEngine(cfgMgr, feedSvc, taskSvc, botSvc, channelSvc)
+	taskEngine := service.NewTaskEngine(cfgMgr, feedSvc, taskSvc, botSvc, channelSvc, logSvc)
 
 	return &Scheduler{
 		cron:       cron.New(),
@@ -37,6 +39,7 @@ func NewScheduler(
 		taskSvc:    taskSvc,
 		botSvc:     botSvc,
 		channelSvc: channelSvc,
+		logSvc:     logSvc,
 		taskEngine: taskEngine,
 		jobs:       make(map[string]cron.EntryID),
 	}
@@ -105,6 +108,13 @@ func (s *Scheduler) RunTask(taskID string) {
 	}
 }
 
+// RunTaskForDate 执行任务(指定日期)
+func (s *Scheduler) RunTaskForDate(taskID, date string) {
+	if err := s.taskEngine.ExecuteTaskForDate(taskID, date); err != nil {
+		log.Error().Err(err).Str("task_id", taskID).Str("date", date).Msg("Task execution failed")
+	}
+}
+
 // TriggerFeedRefresh 手动触发RSS刷新
 func (s *Scheduler) TriggerFeedRefresh(feedID string) error {
 	feed, err := s.feedSvc.Get(feedID)
@@ -120,6 +130,15 @@ func (s *Scheduler) TriggerFeedRefresh(feedID string) error {
 // TriggerTaskRun 手动触发任务执行
 func (s *Scheduler) TriggerTaskRun(taskID string) {
 	go s.RunTask(taskID)
+}
+
+// TriggerTaskRunForDate 手动触发任务执行(指定日期)
+func (s *Scheduler) TriggerTaskRunForDate(taskID, date string) {
+	if date == "" {
+		go s.RunTask(taskID)
+	} else {
+		go s.RunTaskForDate(taskID, date)
+	}
 }
 
 // GetNotifier 获取通知服务(用于测试)

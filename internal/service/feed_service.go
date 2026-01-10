@@ -4,11 +4,14 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/k3a/html2text"
 	"github.com/mmcdole/gofeed"
 	"github.com/rs/zerolog/log"
 
@@ -133,7 +136,44 @@ func truncateContent(content string, maxLen int) string {
 	return string(runes[:maxLen]) + "..."
 }
 
-// Fetch 拉取单个订阅并保存到日期目录
+// convertToReadableText 将 HTML 内容转换为可读的纯文本格式（类似 newsboat）
+func convertToReadableText(item *gofeed.Item, feedName string) string {
+	var sb strings.Builder
+
+	// 文章头部信息
+	sb.WriteString("=" + strings.Repeat("=", 70) + "\n")
+	sb.WriteString(fmt.Sprintf("Title: %s\n", item.Title))
+	sb.WriteString(fmt.Sprintf("Feed: %s\n", feedName))
+	if item.Link != "" {
+		sb.WriteString(fmt.Sprintf("Link: %s\n", item.Link))
+	}
+	if item.PublishedParsed != nil {
+		sb.WriteString(fmt.Sprintf("Date: %s\n", item.PublishedParsed.Format("2006-01-02 15:04:05")))
+	}
+	if len(item.Authors) > 0 && item.Authors[0].Name != "" {
+		sb.WriteString(fmt.Sprintf("Author: %s\n", item.Authors[0].Name))
+	}
+	sb.WriteString("=" + strings.Repeat("=", 70) + "\n\n")
+
+	// 获取内容
+	content := item.Description
+	if item.Content != "" {
+		content = item.Content
+	}
+
+	// 将 HTML 转换为纯文本
+	if content != "" {
+		text := html2text.HTML2Text(content)
+		sb.WriteString(text)
+	}
+
+	sb.WriteString("\n\n")
+	sb.WriteString("-" + strings.Repeat("-", 70) + "\n")
+
+	return sb.String()
+}
+
+// Fetch 拉取单个订阅并保存到日期目录（按文章发布日期归档）
 func (s *FeedService) Fetch(feed *model.Feed) error {
 	log.Info().Str("feed", feed.Name).Str("url", feed.URL).Msg("Fetching feed")
 
@@ -143,89 +183,118 @@ func (s *FeedService) Fetch(feed *model.Feed) error {
 		return err
 	}
 
-	// 获取今天日期
-	today := time.Now().Format("2006-01-02")
+	// 按发布日期分组存储文章
+	articlesByDate := make(map[string][]*gofeed.Item)
 
-	// 确保日期目录存在
-	if err := s.cfgMgr.EnsureRSSDateDir(today); err != nil {
-		return err
-	}
-
-	// 加载或创建今日overview
-	overview, err := s.LoadOverview(today)
-	if err != nil {
-		return err
-	}
-	if overview == nil {
-		overview = &model.DailyOverview{
-			Date:       today,
-			UpdatedAt:  time.Now(),
-			TotalCount: 0,
-			Articles:   []model.ArticleSummary{},
-		}
-	}
-
-	// 创建已存在文章ID的map，用于去重
-	existingIDs := make(map[string]bool)
-	for _, article := range overview.Articles {
-		existingIDs[article.ID] = true
-	}
-
-	// 处理每篇文章
-	newCount := 0
 	for _, item := range parsedFeed.Items {
-		articleID := generateArticleID(item.Link)
-
-		// 跳过已存在的文章
-		if existingIDs[articleID] {
-			continue
-		}
-
-		// 解析发布时间
-		published := time.Now()
+		// 获取文章发布日期
+		publishDate := time.Now().Format("2006-01-02")
 		if item.PublishedParsed != nil {
-			published = *item.PublishedParsed
+			publishDate = item.PublishedParsed.Format("2006-01-02")
 		}
-
-		// 获取完整内容
-		content := item.Description
-		if item.Content != "" {
-			content = item.Content
-		}
-
-		// 保存完整内容到文件
-		contentPath := s.cfgMgr.RSSContentPath(today, articleID)
-		if err := os.WriteFile(contentPath, []byte(content), 0644); err != nil {
-			log.Warn().Err(err).Str("article", articleID).Msg("Failed to save content file")
-			continue
-		}
-
-		// 创建摘要
-		summary := model.ArticleSummary{
-			ID:          articleID,
-			FeedID:      feed.ID,
-			FeedName:    feed.Name,
-			Title:       item.Title,
-			Link:        item.Link,
-			Summary:     truncateContent(content, 200),
-			ContentFile: contentPath,
-			Published:   published,
-			Fetched:     time.Now(),
-		}
-
-		overview.Articles = append(overview.Articles, summary)
-		existingIDs[articleID] = true
-		newCount++
+		articlesByDate[publishDate] = append(articlesByDate[publishDate], item)
 	}
 
-	// 更新overview
-	if newCount > 0 {
-		overview.UpdatedAt = time.Now()
-		overview.TotalCount = len(overview.Articles)
-		if err := s.SaveOverview(today, overview); err != nil {
-			return err
+	// 处理每个日期的文章
+	totalNew := 0
+	for date, items := range articlesByDate {
+		// 确保日期目录存在
+		if err := s.cfgMgr.EnsureRSSDateDir(date); err != nil {
+			log.Warn().Err(err).Str("date", date).Msg("Failed to create date directory")
+			continue
 		}
-		log.Info().Str("feed", feed.Name).Int("new_articles", newCount).Msg("Feed fetched successfully")
+
+		// 加载或创建该日期的overview
+		overview, err := s.LoadOverview(date)
+		if err != nil {
+			log.Warn().Err(err).Str("date", date).Msg("Failed to load overview")
+			continue
+		}
+		if overview == nil {
+			overview = &model.DailyOverview{
+				Date:       date,
+				UpdatedAt:  time.Now(),
+				TotalCount: 0,
+				Articles:   []model.ArticleSummary{},
+			}
+		}
+
+		// 创建已存在文章ID的map，用于去重
+		existingIDs := make(map[string]bool)
+		for _, article := range overview.Articles {
+			existingIDs[article.ID] = true
+		}
+
+		// 处理该日期的文章
+		newCount := 0
+		for _, item := range items {
+			articleID := generateArticleID(item.Link)
+
+			// 跳过已存在的文章
+			if existingIDs[articleID] {
+				continue
+			}
+
+			// 解析发布时间
+			published := time.Now()
+			if item.PublishedParsed != nil {
+				published = *item.PublishedParsed
+			}
+
+			// 获取完整内容（用于摘要）
+			rawContent := item.Description
+			if item.Content != "" {
+				rawContent = item.Content
+			}
+
+			// 将 HTML 转换为可读的纯文本
+			readableText := convertToReadableText(item, feed.Name)
+
+			// 保存可读文本到文件
+			contentPath := s.cfgMgr.RSSContentPath(date, articleID)
+			if err := os.WriteFile(contentPath, []byte(readableText), 0644); err != nil {
+				log.Warn().Err(err).Str("article", articleID).Msg("Failed to save content file")
+				continue
+			}
+
+			// 生成纯文本摘要
+			plainSummary := html2text.HTML2Text(rawContent)
+			if plainSummary == "" {
+				plainSummary = rawContent
+			}
+
+			// 创建摘要
+			summary := model.ArticleSummary{
+				ID:          articleID,
+				FeedID:      feed.ID,
+				FeedName:    feed.Name,
+				Title:       item.Title,
+				Link:        item.Link,
+				Summary:     truncateContent(plainSummary, 200),
+				ContentFile: contentPath,
+				Published:   published,
+				Fetched:     time.Now(),
+			}
+
+			overview.Articles = append(overview.Articles, summary)
+			existingIDs[articleID] = true
+			newCount++
+		}
+
+		// 更新overview
+		if newCount > 0 {
+			overview.UpdatedAt = time.Now()
+			overview.TotalCount = len(overview.Articles)
+			if err := s.SaveOverview(date, overview); err != nil {
+				log.Warn().Err(err).Str("date", date).Msg("Failed to save overview")
+			}
+			log.Info().Str("feed", feed.Name).Str("date", date).Int("new_articles", newCount).Msg("Articles saved")
+			totalNew += newCount
+		}
+	}
+
+	if totalNew > 0 {
+		log.Info().Str("feed", feed.Name).Int("total_new", totalNew).Msg("Feed fetched successfully")
 	} else {
 		log.Info().Str("feed", feed.Name).Msg("No new articles")
 	}
