@@ -59,43 +59,62 @@
         </div>
     </div>
 
-    <!-- Quick Actions -->
-    <div class="card p-6">
-        <h2 class="text-lg font-semibold mb-4">快速开始</h2>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <a href="/feeds/new" class="flex items-center gap-4 p-4 rounded-lg border hover:bg-secondary/50 transition-colors">
+    <!-- RSS / Execution Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="card p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-muted-foreground">最近 1 小时新增文章</p>
+                    <p class="text-2xl font-semibold mt-1">{{if .Stats}}{{index .Stats "rss_last_hour_new"}}{{else}}0{{end}}</p>
+                </div>
                 <div class="p-2 bg-secondary rounded-lg">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    <svg class="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3M12 21a9 9 0 100-18 9 9 0 000 18z"/>
                     </svg>
                 </div>
+            </div>
+        </div>
+
+        <div class="card p-6">
+            <div class="flex items-center justify-between">
                 <div>
-                    <p class="font-medium">添加 RSS 订阅</p>
-                    <p class="text-sm text-muted-foreground">添加新的 RSS 源</p>
+                    <p class="text-sm text-muted-foreground">今日拉取文章</p>
+                    <p class="text-2xl font-semibold mt-1">{{if .Stats}}{{index .Stats "rss_today_count"}}{{else}}0{{end}}</p>
                 </div>
-            </a>
-            <a href="/tasks/new" class="flex items-center gap-4 p-4 rounded-lg border hover:bg-secondary/50 transition-colors">
                 <div class="p-2 bg-secondary rounded-lg">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    <svg class="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"/>
                     </svg>
                 </div>
+            </div>
+        </div>
+
+        <div class="card p-6">
+            <div class="flex items-center justify-between">
                 <div>
-                    <p class="font-medium">创建任务</p>
-                    <p class="text-sm text-muted-foreground">配置 AI 筛选任务</p>
+                    <p class="text-sm text-muted-foreground">今日成功发送（条）</p>
+                    <p class="text-2xl font-semibold mt-1">{{if .Stats}}{{index .Stats "sent_today_count"}}{{else}}0{{end}}</p>
                 </div>
-            </a>
-            <a href="/bots/new" class="flex items-center gap-4 p-4 rounded-lg border hover:bg-secondary/50 transition-colors">
                 <div class="p-2 bg-secondary rounded-lg">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    <svg class="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
                 </div>
+            </div>
+        </div>
+
+        <div class="card p-6">
+            <div class="flex items-center justify-between">
                 <div>
-                    <p class="font-medium">添加 AI 机器人</p>
-                    <p class="text-sm text-muted-foreground">配置 AI 服务</p>
+                    <p class="text-sm text-muted-foreground">今日执行日志（次）</p>
+                    <p class="text-2xl font-semibold mt-1">{{if .Stats}}{{index .Stats "exec_today_count"}}{{else}}0{{end}}</p>
                 </div>
-            </a>
+                <div class="p-2 bg-secondary rounded-lg">
+                    <svg class="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-6a2 2 0 012-2h2a2 2 0 012 2v6m4 0a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2h14z"/>
+                    </svg>
+                </div>
+            </div>
         </div>
     </div>
 </div>

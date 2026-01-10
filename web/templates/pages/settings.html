@@ -1,5 +1,5 @@
 {{define "page_settings"}}
-<div class="max-w-2xl">
+<div class="max-w-2xl mx-auto">
     <div class="card p-6">
         <h2 class="text-lg font-semibold mb-6">系统设置</h2>
         <form id="settings-form" onsubmit="saveSettings(event)" class="space-y-6">
@@ -143,14 +143,22 @@ function saveSettings(e) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)
     })
-    .then(res => {
-        if (!res.ok) throw new Error('Save failed');
-        return res.json();
+    .then(async (res) => {
+        let data = {};
+        try {
+            data = await res.json();
+        } catch (_) {
+            data = {};
+        }
+        if (!res.ok) {
+            throw new Error(data.error || '保存失败');
+        }
+        return data;
     })
-    .then(data => {
+    .then(() => {
         showToast('设置已保存');
     })
-    .catch(err => showToast('保存失败: ' + err.message, 'error'));
+    .catch(err => showToast('保存失败: ' + (err?.message || '未知错误'), 'error'));
 }
 
 function resetSettings() {

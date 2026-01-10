@@ -20,6 +20,8 @@ type TaskEngine struct {
 	botSvc     *BotService
 	channelSvc *ChannelService
 	logSvc     *LogService
+	taskState  *TaskStateService
+	sentSvc    *SentService
 	aiSvc      *AIService
 	notifier   *NotifierService
 }
@@ -40,6 +42,8 @@ func NewTaskEngine(
 		botSvc:     botSvc,
 		channelSvc: channelSvc,
 		logSvc:     logSvc,
+		taskState:  NewTaskStateService(cfgMgr),
+		sentSvc:    NewSentService(cfgMgr),
 		aiSvc:      NewAIService(),
 		notifier:   NewNotifierService(),
 	}
@@ -47,7 +51,7 @@ func NewTaskEngine(
 
 // ExecuteTask 执行任务(两阶段AI分析)
 func (e *TaskEngine) ExecuteTask(taskID string) error {
-	return e.ExecuteTaskForDate(taskID, time.Now().Format("2006-01-02"))
+	return e.ExecuteTaskForDate(taskID, time.Now().In(time.Local).Format("2006-01-02"))
 }
 
 // ExecuteTaskForDate 执行任务(指定日期)
@@ -78,14 +82,76 @@ func (e *TaskEngine) ExecuteTaskForDate(taskID string, date string) error {
 		Status:    model.LogStatusSuccess,
 	}
 
+	var overviewHash string
+	var detailParts []string
+
+	if err := e.taskState.MarkTaskRun(task.ID, startTime); err != nil {
+		log.Warn().Err(err).Str("task", task.Name).Msg("Failed to persist task last run time")
+	}
+
 	// 使用defer记录日志
 	defer func() {
 		execLog.EndTime = time.Now()
 		execLog.Duration = execLog.EndTime.Sub(execLog.StartTime).Milliseconds()
 		if e.logSvc != nil {
+			if execLog.Details == "" && len(detailParts) > 0 {
+				execLog.Details = strings.Join(detailParts, "; ")
+			}
 			e.logSvc.Create(execLog)
 		}
+		if execLog.Status != model.LogStatusFailed && overviewHash != "" {
+			if err := e.taskState.MarkOverviewAnalyzed(task.ID, date, overviewHash); err != nil {
+				log.Warn().Err(err).Str("task", task.Name).Msg("Failed to persist analyzed overview state")
+			}
+		}
 	}()
+
+	// 获取指定日期的overview
+	overview, err := e.feedSvc.LoadOverview(date)
+	if err != nil {
+		execLog.Status = model.LogStatusFailed
+		execLog.Error = err.Error()
+		return fmt.Errorf("failed to load overview for %s: %w", date, err)
+	}
+
+	if overview == nil || len(overview.Articles) == 0 {
+		log.Warn().Str("task", task.Name).Str("date", date).Msg("No RSS content available")
+		execLog.Status = model.LogStatusNoMatch
+		execLog.Details = "无 RSS 内容"
+		return nil
+	}
+
+	sentIDs, err := e.sentSvc.GetSentIDs(date, task.ID)
+	if err != nil {
+		execLog.Status = model.LogStatusFailed
+		execLog.Error = err.Error()
+		return fmt.Errorf("failed to load sended.json: %w", err)
+	}
+
+	filteredOverview := e.filterOverviewBySent(overview, sentIDs)
+	detailParts = append(detailParts, fmt.Sprintf("概览文章数=%d", len(overview.Articles)))
+	detailParts = append(detailParts, fmt.Sprintf("排除已发送=%d", len(overview.Articles)-len(filteredOverview.Articles)))
+	if len(filteredOverview.Articles) == 0 {
+		log.Info().Str("task", task.Name).Str("date", date).Msg("All articles already sent, skipping task execution")
+		execLog.Status = model.LogStatusNoMatch
+		execLog.Details = "今日文章已全部发送"
+		return nil
+	}
+
+	var articleIDs []string
+	for _, a := range filteredOverview.Articles {
+		articleIDs = append(articleIDs, a.ID)
+	}
+	overviewHash = computeOverviewHash(articleIDs)
+	if overviewHash != "" && e.taskState.IsOverviewAnalyzed(task.ID, date, overviewHash) {
+		log.Info().Str("task", task.Name).Str("date", date).Msg("No new articles since last analysis, skipping task execution")
+		execLog.Status = model.LogStatusNoMatch
+		execLog.Details = "与上次相比无新增文章"
+		return nil
+	}
+
+	execLog.ArticleCount = len(filteredOverview.Articles)
+	detailParts = append(detailParts, fmt.Sprintf("分析池=%d", execLog.ArticleCount))
 
 	// 获取AI机器人
 	bot, err := e.botSvc.Get(task.BotID)
@@ -113,30 +179,13 @@ func (e *TaskEngine) ExecuteTaskForDate(taskID string, date string) error {
 		return fmt.Errorf("unsupported provider: %s", bot.Provider)
 	}
 
-	// 获取指定日期的overview
-	overview, err := e.feedSvc.LoadOverview(date)
-	if err != nil {
-		execLog.Status = model.LogStatusFailed
-		execLog.Error = err.Error()
-		return fmt.Errorf("failed to load overview for %s: %w", date, err)
-	}
-
-	if overview == nil || len(overview.Articles) == 0 {
-		log.Warn().Str("task", task.Name).Str("date", date).Msg("No RSS content available")
-		execLog.Status = model.LogStatusNoMatch
-		execLog.Details = "No RSS content available"
-		return nil
-	}
-
-	execLog.ArticleCount = len(overview.Articles)
-
 	// 构建筛选提示词
 	filterPrompt := e.buildFilterPrompt(task)
 
 	// ========== 第一阶段：选择文章 ==========
-	log.Info().Str("task", task.Name).Int("articles", len(overview.Articles)).Msg("Phase 1: Selecting articles from overview")
+	log.Info().Str("task", task.Name).Int("articles", len(filteredOverview.Articles)).Msg("Phase 1: Selecting articles from overview")
 
-	overviewContent := e.buildOverviewContent(overview)
+	overviewContent := e.buildOverviewContent(filteredOverview)
 	phase1Prompt := fmt.Sprintf("%s\n\n%s", model.SystemPromptPhase1, filterPrompt)
 
 	selectionResult, err := provider.AnalyzeForSelection(phase1Prompt, overviewContent)
@@ -149,12 +198,17 @@ func (e *TaskEngine) ExecuteTaskForDate(taskID string, date string) error {
 
 	// 从分析结果中提取选中的文章ID
 	selectedIDs := selectionResult.SelectedArticles
+	if selectionResult.Reason != "" {
+		detailParts = append(detailParts, "第一阶段原因="+truncateForLog(selectionResult.Reason, 200))
+	}
+	selectedIDs = e.filterSelectedIDsBySent(selectedIDs, sentIDs)
 	if len(selectedIDs) == 0 {
 		log.Info().Str("task", task.Name).Str("reason", selectionResult.Reason).Msg("No articles selected in phase 1")
 		execLog.Status = model.LogStatusNoMatch
-		execLog.Details = "No articles selected in phase 1: " + selectionResult.Reason
+		execLog.Details = "第一阶段未选中任何文章：" + selectionResult.Reason
 		return nil
 	}
+	detailParts = append(detailParts, fmt.Sprintf("第一阶段选中=%d", len(selectedIDs)))
 
 	log.Info().Str("task", task.Name).Int("selected", len(selectedIDs)).Msg("Articles selected for detailed analysis")
 
@@ -162,11 +216,11 @@ func (e *TaskEngine) ExecuteTaskForDate(taskID string, date string) error {
 	log.Info().Str("task", task.Name).Msg("Phase 2: Analyzing selected articles")
 
 	// 加载选中文章的完整内容
-	fullContent := e.loadSelectedArticlesContent(date, selectedIDs, overview)
+	fullContent := e.loadSelectedArticlesContent(date, selectedIDs, filteredOverview)
 	if fullContent == "" {
 		log.Warn().Str("task", task.Name).Msg("Failed to load selected articles content")
 		execLog.Status = model.LogStatusNoMatch
-		execLog.Details = "Failed to load content"
+		execLog.Details = "加载文章内容失败"
 		return nil
 	}
 
@@ -184,15 +238,51 @@ func (e *TaskEngine) ExecuteTaskForDate(taskID string, date string) error {
 	if !analysisResult.HasContent || len(analysisResult.Items) == 0 {
 		log.Info().Str("task", task.Name).Msg("No matching content found after detailed analysis")
 		execLog.Status = model.LogStatusNoMatch
-		execLog.Details = "No matching content"
+		execLog.Details = "第二阶段无匹配内容"
 		return nil
 	}
 
 	execLog.MatchCount = len(analysisResult.Items)
 	log.Info().Str("task", task.Name).Int("items", len(analysisResult.Items)).Msg("Found matching content")
+	detailParts = append(detailParts, fmt.Sprintf("第二阶段匹配=%d", execLog.MatchCount))
+
+	// 去重 + 补齐通知字段（标题/来源/发布时间/关键词/摘要长度）
+	prepared := e.prepareNotifyItems(task, analysisResult.Items, filteredOverview, sentIDs)
+	if len(prepared) == 0 {
+		log.Info().Str("task", task.Name).Msg("All matched content already processed or below importance")
+		execLog.Status = model.LogStatusNoMatch
+		execLog.Details = "匹配内容均已发送或重要性不足"
+		return nil
+	}
+	analysisResult.Items = prepared
+	execLog.MatchCount = len(analysisResult.Items)
+	detailParts = append(detailParts, fmt.Sprintf("准备发送=%d", execLog.MatchCount))
 
 	// 发送通知
-	return e.sendNotifications(task, analysisResult)
+	if err := e.sendNotifications(date, task, analysisResult); err != nil {
+		execLog.Status = model.LogStatusFailed
+		execLog.Error = err.Error()
+		return err
+	}
+	execLog.Status = model.LogStatusSuccess
+	execLog.Details = fmt.Sprintf("已发送 %d 条", execLog.MatchCount)
+	return nil
+}
+
+func truncateForLog(s string, maxRunes int) string {
+	s = strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
+	s = strings.Join(strings.Fields(s), " ")
+	if maxRunes <= 0 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= maxRunes {
+		return s
+	}
+	if maxRunes == 1 {
+		return "…"
+	}
+	return string(r[:maxRunes-1]) + "…"
 }
 
 // buildOverviewContent 构建overview内容供AI阅读
@@ -272,6 +362,7 @@ func (e *TaskEngine) loadSelectedArticlesContent(date string, ids []string, over
 		}
 
 		sb.WriteString(fmt.Sprintf("=== %s ===\n", article.Title))
+		sb.WriteString(fmt.Sprintf("文章ID: %s\n", article.ID))
 		sb.WriteString(fmt.Sprintf("来源: %s\n", article.FeedName))
 		sb.WriteString(fmt.Sprintf("链接: %s\n", article.Link))
 		sb.WriteString(fmt.Sprintf("时间: %s\n\n", article.Published.Format("2006-01-02 15:04")))
@@ -281,6 +372,182 @@ func (e *TaskEngine) loadSelectedArticlesContent(date string, ids []string, over
 	}
 
 	return sb.String()
+}
+
+func (e *TaskEngine) prepareNotifyItems(task *model.Task, items []model.AIAnalysisItem, overview *model.DailyOverview, sentIDs map[string]bool) []model.AIAnalysisItem {
+	articleMap := make(map[string]model.ArticleSummary, len(overview.Articles))
+	for _, a := range overview.Articles {
+		articleMap[a.ID] = a
+	}
+
+	minImportance := task.Prompt.MinImportance
+	if minImportance == 0 {
+		minImportance = 3
+	}
+
+	seen := make(map[string]bool)
+	var prepared []model.AIAnalysisItem
+	for _, item := range items {
+		item = e.enrichNotifyItem(task, item, articleMap)
+
+		if item.ArticleID != "" && sentIDs[item.ArticleID] {
+			continue
+		}
+
+		if item.Importance < 1 {
+			item.Importance = 1
+		}
+		if item.Importance > 5 {
+			item.Importance = 5
+		}
+		if item.Importance < minImportance {
+			continue
+		}
+
+		if item.ArticleID != "" {
+			if seen[item.ArticleID] {
+				continue
+			}
+			seen[item.ArticleID] = true
+		}
+
+		articleID := item.ArticleID
+		if articleID == "" && item.Link != "" {
+			articleID = generateArticleID(item.Link)
+			item.ArticleID = articleID
+		}
+
+		if articleID != "" && sentIDs[articleID] {
+			continue
+		}
+
+		prepared = append(prepared, item)
+	}
+
+	return prepared
+}
+
+func (e *TaskEngine) enrichNotifyItem(task *model.Task, item model.AIAnalysisItem, articleMap map[string]model.ArticleSummary) model.AIAnalysisItem {
+	articleID := strings.TrimSpace(item.ArticleID)
+	if articleID == "" && item.Link != "" {
+		articleID = generateArticleID(item.Link)
+	}
+	if articleID != "" {
+		item.ArticleID = articleID
+	}
+
+	if articleID != "" {
+		if a, ok := articleMap[articleID]; ok {
+			item.Title = a.Title
+			item.Source = a.FeedName
+			item.Link = a.Link
+			item.PublishedAt = a.Published.Format("2006-01-02 15:04")
+		}
+	}
+
+	item.SummaryFull = e.normalizeCnSummaryFull(item.Summary, item.Keywords, task.Prompt.Keywords)
+	item.Summary = e.normalizeCnSummary(item.Summary, item.Keywords, task.Prompt.Keywords, 100)
+	return item
+}
+
+func (e *TaskEngine) normalizeCnSummaryFull(summary string, keywords []string, fallbackKeywords []string) string {
+	s := strings.TrimSpace(summary)
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.Join(strings.Fields(s), " ")
+
+	kws := keywords
+	if len(kws) == 0 {
+		kws = fallbackKeywords
+	}
+	kws = uniqueNonEmpty(kws)
+
+	if len(kws) > 0 && !strings.Contains(s, "关键词") {
+		s = s + " 关键词：" + strings.Join(kws[:minInt(5, len(kws))], "、")
+	}
+	return s
+}
+
+func (e *TaskEngine) normalizeCnSummary(summary string, keywords []string, fallbackKeywords []string, maxRunes int) string {
+	s := strings.TrimSpace(summary)
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.Join(strings.Fields(s), " ")
+
+	kws := keywords
+	if len(kws) == 0 {
+		kws = fallbackKeywords
+	}
+	kws = uniqueNonEmpty(kws)
+
+	// 先保证主体不超过限制（尽量在分隔符处截断，不使用省略号）
+	s = cutAtSeparator(s, maxRunes)
+
+	// 再尽量把关键词塞进100字内：summary + " 关键词：a、b、c"
+	if len(kws) > 0 && maxRunes > 0 {
+		for keep := minInt(5, len(kws)); keep >= 1; keep-- {
+			tail := " 关键词：" + strings.Join(kws[:keep], "、")
+			if runeLen(s)+runeLen(tail) <= maxRunes {
+				s = s + tail
+				return s
+			}
+		}
+	}
+
+	return s
+}
+
+func uniqueNonEmpty(in []string) []string {
+	seen := make(map[string]bool)
+	var out []string
+	for _, v := range in {
+		v = strings.TrimSpace(v)
+		if v == "" || seen[v] {
+			continue
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	return out
+}
+
+func runeLen(s string) int {
+	return len([]rune(s))
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func cutAtSeparator(s string, maxRunes int) string {
+	if maxRunes <= 0 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= maxRunes {
+		return s
+	}
+
+	seps := map[rune]bool{
+		'。': true, '！': true, '？': true, '；': true, ';': true,
+		'，': true, ',': true, '、': true, ':': true, '：': true,
+	}
+
+	cut := -1
+	for i := maxRunes - 1; i >= 0; i-- {
+		if seps[r[i]] {
+			cut = i + 1
+			break
+		}
+	}
+	if cut == -1 {
+		cut = maxRunes
+	}
+
+	out := strings.TrimSpace(string(r[:cut]))
+	out = strings.TrimRight(out, "，,、:：")
+	return out
 }
 
 // buildFilterPrompt 构建筛选提示词
@@ -312,11 +579,16 @@ func (e *TaskEngine) buildFilterPrompt(task *model.Task) string {
 }
 
 // sendNotifications 发送通知
-func (e *TaskEngine) sendNotifications(task *model.Task, result *model.AIAnalysisResult) error {
+func (e *TaskEngine) sendNotifications(date string, task *model.Task, result *model.AIAnalysisResult) error {
 	// 获取通知渠道
 	channels, err := e.channelSvc.List()
 	if err != nil {
 		return fmt.Errorf("failed to get channels: %w", err)
+	}
+
+	channelMap := make(map[string]model.Channel, len(channels))
+	for _, ch := range channels {
+		channelMap[ch.ID] = ch
 	}
 
 	// 构建消息
@@ -327,18 +599,98 @@ func (e *TaskEngine) sendNotifications(task *model.Task, result *model.AIAnalysi
 	}
 
 	// 发送到每个配置的渠道
+	var failed []string
+	sentMap := make(map[string]model.AIAnalysisItem)
 	for _, channelID := range task.Channels {
-		for _, channel := range channels {
-			if channel.ID == channelID && channel.Enabled {
-				log.Info().Str("task", task.Name).Str("channel", channel.Name).Msg("Sending notification")
-				if err := e.notifier.Send(&channel, &msg); err != nil {
-					log.Error().Err(err).Str("channel", channel.Name).Msg("Failed to send notification")
+		channel, ok := channelMap[channelID]
+		if !ok {
+			failed = append(failed, fmt.Sprintf("%s: channel not found", channelID))
+			continue
+		}
+		if !channel.Enabled {
+			failed = append(failed, fmt.Sprintf("%s(%s): channel disabled", channel.Name, channel.ID))
+			continue
+		}
+
+		log.Info().Str("task", task.Name).Str("channel", channel.Name).Msg("Sending notification")
+		if err := e.notifier.Send(&channel, &msg); err != nil {
+			log.Error().Err(err).Str("channel", channel.Name).Msg("Failed to send notification")
+			failed = append(failed, fmt.Sprintf("%s(%s): %s", channel.Name, channel.ID, err.Error()))
+
+			if pe, ok := err.(*PartialSendError); ok && len(pe.SentArticleIDs) > 0 {
+				for _, id := range pe.SentArticleIDs {
+					if it, ok := findItemByArticleID(msg.Items, id); ok {
+						sentMap[id] = it
+					}
 				}
+			}
+			continue
+		}
+
+		for _, it := range msg.Items {
+			if it.ArticleID != "" {
+				sentMap[it.ArticleID] = it
 			}
 		}
 	}
 
+	if len(sentMap) > 0 {
+		var sentItems []model.AIAnalysisItem
+		for _, it := range sentMap {
+			sentItems = append(sentItems, it)
+		}
+		if err := e.sentSvc.MarkSent(date, task, sentItems); err != nil {
+			log.Warn().Err(err).Str("task", task.Name).Str("date", date).Msg("Failed to update sended.json")
+		}
+	}
+
+	if len(failed) > 0 {
+		return fmt.Errorf("通知发送失败：%s", strings.Join(failed, "；"))
+	}
 	return nil
+}
+
+func findItemByArticleID(items []model.AIAnalysisItem, id string) (model.AIAnalysisItem, bool) {
+	for _, it := range items {
+		if it.ArticleID == id {
+			return it, true
+		}
+	}
+	return model.AIAnalysisItem{}, false
+}
+
+func (e *TaskEngine) filterOverviewBySent(overview *model.DailyOverview, sentIDs map[string]bool) *model.DailyOverview {
+	if overview == nil {
+		return overview
+	}
+	if len(sentIDs) == 0 {
+		return overview
+	}
+	var kept []model.ArticleSummary
+	for _, a := range overview.Articles {
+		if a.ID != "" && sentIDs[a.ID] {
+			continue
+		}
+		kept = append(kept, a)
+	}
+	cp := *overview
+	cp.Articles = kept
+	cp.TotalCount = len(kept)
+	return &cp
+}
+
+func (e *TaskEngine) filterSelectedIDsBySent(ids []string, sentIDs map[string]bool) []string {
+	if len(ids) == 0 || len(sentIDs) == 0 {
+		return ids
+	}
+	var kept []string
+	for _, id := range ids {
+		if id != "" && sentIDs[id] {
+			continue
+		}
+		kept = append(kept, id)
+	}
+	return kept
 }
 
 // ---- 简化版本：单阶段分析(作为备选) ----
@@ -372,7 +724,7 @@ func (e *TaskEngine) ExecuteTaskSimple(taskID string) error {
 	}
 
 	// 获取今日overview
-	today := time.Now().Format("2006-01-02")
+	today := time.Now().In(time.Local).Format("2006-01-02")
 	overview, err := e.feedSvc.LoadOverview(today)
 	if err != nil || overview == nil || len(overview.Articles) == 0 {
 		log.Warn().Str("task", task.Name).Msg("No RSS content available")
@@ -394,7 +746,7 @@ func (e *TaskEngine) ExecuteTaskSimple(taskID string) error {
 		return nil
 	}
 
-	return e.sendNotifications(task, result)
+	return e.sendNotifications(today, task, result)
 }
 
 // 添加缺失的import

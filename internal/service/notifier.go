@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"crypto/tls"
+	"errors"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,6 +22,18 @@ type NotifierService struct {
 	client *http.Client
 }
 
+type PartialSendError struct {
+	Err            error
+	SentArticleIDs []string
+}
+
+func (e *PartialSendError) Error() string {
+	if e == nil || e.Err == nil {
+		return "partial send failed"
+	}
+	return e.Err.Error()
+}
+
 // NewNotifierService 创建通知服务
 func NewNotifierService() *NotifierService {
 	return &NotifierService{
@@ -35,6 +48,8 @@ func (s *NotifierService) Send(channel *model.Channel, msg *model.NotifyMessage)
 		return s.sendTelegram(channel, msg)
 	case model.ChannelTypeWebhook:
 		return s.sendWebhook(channel, msg)
+	case model.ChannelTypeWecom:
+		return s.sendWecom(channel, msg)
 	case model.ChannelTypeBark:
 		return s.sendBark(channel, msg)
 	case model.ChannelTypeEmail:
@@ -42,6 +57,24 @@ func (s *NotifierService) Send(channel *model.Channel, msg *model.NotifyMessage)
 	default:
 		return fmt.Errorf("unsupported channel type: %s", channel.Type)
 	}
+}
+
+// sendWecom 发送企业微信机器人通知（单篇文章一条消息）
+func (s *NotifierService) sendWecom(channel *model.Channel, msg *model.NotifyMessage) error {
+	url := channel.Config["webhook_url"]
+	if url == "" {
+		url = channel.Config["url"]
+	}
+	method := channel.Config["method"]
+	if method == "" {
+		method = "POST"
+	}
+	template := channel.Config["body_template"]
+
+	if url == "" {
+		return fmt.Errorf("missing wecom webhook url")
+	}
+	return s.sendWecomMessages(url, method, template, msg, channel)
 }
 
 // Test 测试通知渠道
@@ -116,22 +149,62 @@ func (s *NotifierService) sendWebhook(channel *model.Channel, msg *model.NotifyM
 		method = "POST"
 	}
 
-	var jsonData []byte
-	var err error
-
-	// 根据webhook类型构建请求体
-	if webhookType == "wecom" || webhookType == "" {
-		// 企业微信Markdown格式
-		jsonData, err = s.buildWecomPayload(msg, bodyTemplate)
-	} else {
-		// 自定义模板
-		jsonData, err = s.buildCustomPayload(msg, bodyTemplate)
+	// 自定义Webhook：按原有逻辑一次性发送整包
+	if webhookType != "wecom" && webhookType != "" {
+		jsonData, err := s.buildCustomPayload(msg, bodyTemplate)
+		if err != nil {
+			return err
+		}
+		return s.sendWebhookRequest(url, method, jsonData, channel)
 	}
 
-	if err != nil {
-		return err
+	// 企业微信：单篇文章一条消息
+	return s.sendWecomMessages(url, method, bodyTemplate, msg, channel)
+}
+
+func (s *NotifierService) sendWecomMessages(url, method, template string, msg *model.NotifyMessage, channel *model.Channel) error {
+	if msg == nil || len(msg.Items) == 0 {
+		return nil
 	}
 
+	var firstErr error
+	var sentIDs []string
+	for _, item := range msg.Items {
+		single := &model.NotifyMessage{
+			TaskID:   msg.TaskID,
+			TaskName: msg.TaskName,
+			Items:    []model.AIAnalysisItem{item},
+		}
+
+		jsonData, err := s.buildWecomPayload(single, template)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+
+		if err := s.sendWebhookRequest(url, method, jsonData, channel); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if item.ArticleID != "" {
+			sentIDs = append(sentIDs, item.ArticleID)
+		}
+	}
+
+	if firstErr != nil {
+		if len(sentIDs) > 0 {
+			return &PartialSendError{Err: firstErr, SentArticleIDs: sentIDs}
+		}
+		return firstErr
+	}
+	return nil
+}
+
+func (s *NotifierService) sendWebhookRequest(url, method string, jsonData []byte, channel *model.Channel) error {
 	req, err := http.NewRequest(method, url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return err
@@ -247,23 +320,27 @@ func (s *NotifierService) applyTemplate(template string, msg *model.NotifyMessag
 
 // formatWecomMarkdown 格式化企业微信Markdown消息
 func (s *NotifierService) formatWecomMarkdown(msg *model.NotifyMessage) string {
-	var sb strings.Builder
-
-	sb.WriteString(fmt.Sprintf("## 📰 %s\n\n", msg.TaskName))
-	sb.WriteString(fmt.Sprintf("> 共筛选出 **%d** 条内容\n\n", len(msg.Items)))
-
-	for i, item := range msg.Items {
-		if i >= 5 {
-			sb.WriteString(fmt.Sprintf("\n... 还有 %d 条内容", len(msg.Items)-5))
-			break
-		}
-
-		sb.WriteString(fmt.Sprintf("### %s\n", item.Title))
-		sb.WriteString(fmt.Sprintf("%s\n", item.Summary))
-		sb.WriteString(fmt.Sprintf("> <font color=\"comment\">来源: %s | 重要度: %d/5</font>\n", item.Source, item.Importance))
-		sb.WriteString(fmt.Sprintf("[阅读原文](%s)\n\n", item.Link))
+	if msg == nil || len(msg.Items) == 0 {
+		return "## EchoFeed\n\n> 无可推送内容"
 	}
 
+	item := msg.Items[0]
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("## 📰 %s\n\n", msg.TaskName))
+	sb.WriteString(fmt.Sprintf("### %s\n\n", item.Title))
+
+	meta := fmt.Sprintf("信息来源：%s", item.Source)
+	if item.PublishedAt != "" {
+		meta = meta + " ｜ 发布时间：" + item.PublishedAt
+	}
+	meta = meta + fmt.Sprintf(" ｜ 重要性：%d/5", item.Importance)
+	sb.WriteString(fmt.Sprintf("> <font color=\"comment\">%s</font>\n\n", meta))
+
+	sb.WriteString(fmt.Sprintf("%s\n\n", item.Summary))
+	if item.Link != "" {
+		sb.WriteString(fmt.Sprintf("[原文链接](%s)\n", item.Link))
+	}
 	return sb.String()
 }
 
@@ -345,11 +422,39 @@ func (s *NotifierService) sendEmail(channel *model.Channel, msg *model.NotifyMes
 
 	err := smtp.SendMail(addr, auth, from, []string{to}, []byte(message))
 	if err != nil {
+		// 某些 SMTP 服务器会在发送完成后立即断开连接，导致客户端认为失败（但邮件已投递）
+		if isIgnorableSMTPTerminationError(err) {
+			log.Warn().Err(err).Str("channel", channel.Name).Str("to", to).Msg("SMTP termination error ignored after send")
+			return nil
+		}
 		return fmt.Errorf("failed to send email: %w", err)
 	}
 
 	log.Info().Str("channel", channel.Name).Str("to", to).Msg("Email notification sent")
 	return nil
+}
+
+func isIgnorableSMTPTerminationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+	s := strings.ToLower(err.Error())
+	if strings.Contains(s, "short response") {
+		return true
+	}
+	if strings.Contains(s, "unexpected eof") {
+		return true
+	}
+	if strings.Contains(s, "connection reset by peer") {
+		return true
+	}
+	if strings.Contains(s, "broken pipe") {
+		return true
+	}
+	return false
 }
 
 // sendEmailWithTLS 使用TLS发送邮件
@@ -382,28 +487,40 @@ func (s *NotifierService) sendEmailWithTLS(addr, username, password, from, to, m
 
 	// 发送邮件
 	if err = client.Mail(from); err != nil {
-		return err
+		return fmt.Errorf("smtp_mail: %w", err)
 	}
 	if err = client.Rcpt(to); err != nil {
-		return err
+		return fmt.Errorf("smtp_rcpt: %w", err)
 	}
 
 	w, err := client.Data()
 	if err != nil {
-		return err
+		return fmt.Errorf("smtp_data: %w", err)
 	}
 
 	_, err = w.Write([]byte(message))
 	if err != nil {
-		return err
+		return fmt.Errorf("smtp_write: %w", err)
 	}
 
 	err = w.Close()
 	if err != nil {
-		return err
+		// 某些服务器在接受完 DATA 后会提前断开连接，但邮件仍会投递；这里避免误判失败。
+		if isIgnorableSMTPTerminationError(err) {
+			log.Warn().Err(err).Str("to", to).Msg("SMTP termination error ignored after data close")
+			return nil
+		}
+		return fmt.Errorf("smtp_close: %w", err)
 	}
 
-	return client.Quit()
+	if err := client.Quit(); err != nil {
+		if isIgnorableSMTPTerminationError(err) {
+			log.Warn().Err(err).Str("to", to).Msg("SMTP termination error ignored on quit")
+			return nil
+		}
+		return fmt.Errorf("smtp_quit: %w", err)
+	}
+	return nil
 }
 
 // formatEmailBody 格式化邮件正文(HTML格式)
@@ -420,10 +537,23 @@ func (s *NotifierService) formatEmailBody(msg *model.NotifyMessage) string {
 			break
 		}
 
+		summary := item.SummaryFull
+		if strings.TrimSpace(summary) == "" {
+			summary = item.Summary
+		}
+
+		published := strings.TrimSpace(item.PublishedAt)
+		if published == "" {
+			published = "-"
+		}
+
 		sb.WriteString(`<div style="margin-bottom: 20px; padding: 15px; border: 1px solid #eee; border-radius: 8px;">`)
 		sb.WriteString(fmt.Sprintf(`<h3 style="margin: 0 0 10px 0;"><a href="%s" style="color: #333; text-decoration: none;">%s</a></h3>`, item.Link, item.Title))
-		sb.WriteString(fmt.Sprintf(`<p style="color: #666; margin: 0 0 10px 0;">%s</p>`, item.Summary))
-		sb.WriteString(fmt.Sprintf(`<p style="color: #999; font-size: 12px; margin: 0;">📍 %s | ⭐ 重要度: %d/5</p>`, item.Source, item.Importance))
+		sb.WriteString(fmt.Sprintf(`<p style="color: #666; margin: 0 0 10px 0;">%s</p>`, summary))
+		sb.WriteString(fmt.Sprintf(`<p style="color: #999; font-size: 12px; margin: 0;">📍 %s | 🕒 %s | ⭐ 重要度: %d/5</p>`, item.Source, published, item.Importance))
+		if strings.TrimSpace(item.Link) != "" {
+			sb.WriteString(fmt.Sprintf(`<p style="margin: 10px 0 0 0; font-size: 12px;"><a href="%s" style="color: #2563eb; text-decoration: none;">原文链接</a></p>`, item.Link))
+		}
 		sb.WriteString(`</div>`)
 	}
 

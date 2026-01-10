@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -40,10 +43,34 @@ func (h *FeedHandler) Get(c *gin.Context) {
 		return
 	}
 	if feed == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Feed not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "未找到订阅"})
 		return
 	}
 	c.JSON(http.StatusOK, feed)
+}
+
+func feedTestErrorToChinese(err error) (string, string) {
+	raw := strings.TrimSpace(err.Error())
+	details := raw
+
+	switch {
+	case strings.HasPrefix(raw, "build_request:"):
+		return "URL 格式不正确", strings.TrimSpace(strings.TrimPrefix(raw, "build_request:"))
+	case strings.HasPrefix(raw, "http_status:"):
+		codeStr := strings.TrimSpace(strings.TrimPrefix(raw, "http_status:"))
+		if code, parseErr := strconv.Atoi(codeStr); parseErr == nil && code > 0 {
+			return fmt.Sprintf("RSS 订阅返回错误状态（HTTP %d）", code), ""
+		}
+		return "RSS 订阅返回错误状态", codeStr
+	case strings.HasPrefix(raw, "request:"):
+		return "RSS 订阅无法访问", strings.TrimSpace(strings.TrimPrefix(raw, "request:"))
+	case strings.HasPrefix(raw, "parse:"):
+		return "RSS 订阅解析失败", strings.TrimSpace(strings.TrimPrefix(raw, "parse:"))
+	case strings.HasPrefix(raw, "read:"):
+		return "读取 RSS 内容失败", strings.TrimSpace(strings.TrimPrefix(raw, "read:"))
+	default:
+		return "RSS 订阅不可用", details
+	}
 }
 
 // Create 创建订阅
@@ -51,6 +78,15 @@ func (h *FeedHandler) Create(c *gin.Context) {
 	var feed model.Feed
 	if err := c.ShouldBindJSON(&feed); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if _, _, err := h.feedSvc.TestFeedURL(feed.URL); err != nil {
+		msg, details := feedTestErrorToChinese(err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "保存失败：" + msg,
+			"details": details,
+		})
 		return
 	}
 
@@ -71,6 +107,15 @@ func (h *FeedHandler) Update(c *gin.Context) {
 	}
 	feed.ID = id
 
+	if _, _, err := h.feedSvc.TestFeedURL(feed.URL); err != nil {
+		msg, details := feedTestErrorToChinese(err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "保存失败：" + msg,
+			"details": details,
+		})
+		return
+	}
+
 	if err := h.feedSvc.Update(&feed); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -85,7 +130,7 @@ func (h *FeedHandler) Delete(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "Deleted"})
+	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
 }
 
 // Refresh 手动刷新订阅
@@ -95,5 +140,5 @@ func (h *FeedHandler) Refresh(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "Refresh triggered"})
+	c.JSON(http.StatusOK, gin.H{"message": "刷新已触发"})
 }

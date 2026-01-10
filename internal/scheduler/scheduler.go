@@ -18,6 +18,7 @@ type Scheduler struct {
 	channelSvc *service.ChannelService
 	logSvc     *service.LogService
 	taskEngine *service.TaskEngine
+	cleanupSvc *service.CleanupService
 	jobs       map[string]cron.EntryID
 }
 
@@ -31,6 +32,7 @@ func NewScheduler(
 	logSvc *service.LogService,
 ) *Scheduler {
 	taskEngine := service.NewTaskEngine(cfgMgr, feedSvc, taskSvc, botSvc, channelSvc, logSvc)
+	cleanupSvc := service.NewCleanupService(cfgMgr, logSvc)
 
 	return &Scheduler{
 		cron:       cron.New(),
@@ -41,6 +43,7 @@ func NewScheduler(
 		channelSvc: channelSvc,
 		logSvc:     logSvc,
 		taskEngine: taskEngine,
+		cleanupSvc: cleanupSvc,
 		jobs:       make(map[string]cron.EntryID),
 	}
 }
@@ -53,6 +56,26 @@ func (s *Scheduler) Start() {
 		if err := s.feedSvc.FetchAll(); err != nil {
 			log.Error().Err(err).Msg("Scheduled RSS fetch failed")
 		}
+	})
+
+	// 数据清理任务：每天凌晨 1 点执行，保留最近 7 天
+	s.cron.AddFunc("0 1 * * *", func() {
+		settings, err := s.cfgMgr.LoadSettings()
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to load settings for cleanup")
+			return
+		}
+		days := settings.Fetch.RetentionDays
+		if days <= 0 {
+			days = 7
+		}
+
+		log.Info().Int("retention_days", days).Msg("Cleanup job started")
+		if err := s.cleanupSvc.CleanupBeforeToday(days); err != nil {
+			log.Error().Err(err).Msg("Cleanup job failed")
+			return
+		}
+		log.Info().Msg("Cleanup job finished")
 	})
 
 	// 加载任务调度

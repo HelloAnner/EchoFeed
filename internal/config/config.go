@@ -25,6 +25,8 @@ func (m *Manager) EnsureDataDir() error {
 		filepath.Join(m.DataDir, "rss"),
 		filepath.Join(m.DataDir, "logs"),
 		filepath.Join(m.DataDir, "logs", "tasks"),
+		filepath.Join(m.DataDir, "state"),
+		filepath.Join(m.DataDir, "state", "tasks"),
 	}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0755); err != nil {

@@ -1,12 +1,11 @@
-version: '3.8'
-
 services:
   echofeed:
+    image: echofeed:local
     build: .
     container_name: echofeed
     restart: unless-stopped
     ports:
-      - "33333:8080"
+      - "33333:33333"
     volumes:
       - ./data:/app/data
     environment:

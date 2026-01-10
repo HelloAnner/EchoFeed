@@ -73,11 +73,9 @@
             <option value="{{.ID}}">{{.Name}}</option>
             {{end}}
         </select>
-        <button onclick="refreshLogs()" class="btn btn-outline">
-            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-            </svg>
-            刷新
+        <button onclick="refreshLogs()" class="btn btn-outline">刷新</button>
+        <button onclick="clearLogs()" class="btn btn-outline text-destructive">
+            清理日志
         </button>
     </div>
 
@@ -87,21 +85,21 @@
             <table class="w-full">
                 <thead class="bg-secondary/50">
                     <tr>
-                        <th class="px-4 py-3 text-left text-sm font-medium">任务</th>
-                        <th class="px-4 py-3 text-left text-sm font-medium">状态</th>
-                        <th class="px-4 py-3 text-left text-sm font-medium">时间</th>
-                        <th class="px-4 py-3 text-left text-sm font-medium">耗时</th>
-                        <th class="px-4 py-3 text-left text-sm font-medium">文章/匹配</th>
-                        <th class="px-4 py-3 text-left text-sm font-medium">详情</th>
+                        <th class="px-5 py-3 text-left text-sm font-medium whitespace-nowrap w-72">任务</th>
+                        <th class="px-5 py-3 text-left text-sm font-medium whitespace-nowrap w-28">状态</th>
+                        <th class="px-5 py-3 text-left text-sm font-medium whitespace-nowrap w-44">时间</th>
+                        <th class="px-5 py-3 text-left text-sm font-medium whitespace-nowrap w-28">耗时</th>
+                        <th class="px-5 py-3 text-left text-sm font-medium whitespace-nowrap w-32">文章/匹配</th>
+                        <th class="px-5 py-3 text-left text-sm font-medium whitespace-nowrap min-w-[420px]">详情</th>
                     </tr>
                 </thead>
                 <tbody id="log-table-body">
                     {{range .Logs}}
                     <tr class="border-t hover:bg-secondary/30">
-                        <td class="px-4 py-3">
+                        <td class="px-5 py-3 whitespace-nowrap">
                             <span class="font-medium">{{.TaskName}}</span>
                         </td>
-                        <td class="px-4 py-3">
+                        <td class="px-5 py-3 whitespace-nowrap">
                             {{if eq .Status "success"}}
                             <span class="badge badge-success">成功</span>
                             {{else if eq .Status "failed"}}
@@ -110,16 +108,16 @@
                             <span class="badge badge-warning">无匹配</span>
                             {{end}}
                         </td>
-                        <td class="px-4 py-3 text-sm text-muted-foreground">
+                        <td class="px-5 py-3 text-sm text-muted-foreground whitespace-nowrap">
                             {{.StartTime.Format "01-02 15:04:05"}}
                         </td>
-                        <td class="px-4 py-3 text-sm">
+                        <td class="px-5 py-3 text-sm whitespace-nowrap">
                             {{.Duration}}ms
                         </td>
-                        <td class="px-4 py-3 text-sm">
+                        <td class="px-5 py-3 text-sm whitespace-nowrap">
                             {{.ArticleCount}} / {{.MatchCount}}
                         </td>
-                        <td class="px-4 py-3 text-sm text-muted-foreground">
+                        <td class="px-5 py-3 text-sm text-muted-foreground whitespace-nowrap">
                             {{if .Error}}
                             <span class="text-red-600" title="{{.Error}}">{{.Error}}</span>
                             {{else if .Details}}
@@ -162,6 +160,22 @@ function refreshLogs() {
     location.reload();
 }
 
+function clearLogs() {
+    if (!confirm('确定要清空全部执行日志吗？')) {
+        return;
+    }
+    fetch('/api/logs/clear', { method: 'POST' })
+        .then(res => {
+            if (!res.ok) throw new Error('Clear failed');
+            return res.json();
+        })
+        .then(data => {
+            showToast('已清理');
+            setTimeout(() => location.reload(), 600);
+        })
+        .catch(err => showToast('清理失败: ' + err.message, 'error'));
+}
+
 function renderLogs(logs) {
     const tbody = document.getElementById('log-table-body');
     if (!logs || logs.length === 0) {
@@ -171,26 +185,26 @@ function renderLogs(logs) {
 
     tbody.innerHTML = logs.map(log => `
         <tr class="border-t hover:bg-secondary/30">
-            <td class="px-4 py-3">
+            <td class="px-5 py-3 whitespace-nowrap">
                 <span class="font-medium">${log.task_name}</span>
             </td>
-            <td class="px-4 py-3">
+            <td class="px-5 py-3 whitespace-nowrap">
                 ${log.status === 'success'
                     ? '<span class="badge badge-success">成功</span>'
                     : log.status === 'failed'
                     ? '<span class="badge badge-destructive">失败</span>'
                     : '<span class="badge badge-warning">无匹配</span>'}
             </td>
-            <td class="px-4 py-3 text-sm text-muted-foreground">
+            <td class="px-5 py-3 text-sm text-muted-foreground whitespace-nowrap">
                 ${formatTime(log.start_time)}
             </td>
-            <td class="px-4 py-3 text-sm">
+            <td class="px-5 py-3 text-sm whitespace-nowrap">
                 ${log.duration}ms
             </td>
-            <td class="px-4 py-3 text-sm">
+            <td class="px-5 py-3 text-sm whitespace-nowrap">
                 ${log.article_count} / ${log.match_count}
             </td>
-            <td class="px-4 py-3 text-sm text-muted-foreground">
+            <td class="px-5 py-3 text-sm text-muted-foreground whitespace-nowrap">
                 ${log.error ? '<span class="text-red-600">' + log.error + '</span>' : (log.details || '-')}
             </td>
         </tr>

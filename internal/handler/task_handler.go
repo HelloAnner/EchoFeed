@@ -40,7 +40,7 @@ func (h *TaskHandler) Get(c *gin.Context) {
 		return
 	}
 	if task == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "未找到任务"})
 		return
 	}
 	c.JSON(http.StatusOK, task)
@@ -97,7 +97,7 @@ func (h *TaskHandler) Delete(c *gin.Context) {
 	// 重新加载任务调度
 	h.sched.ReloadTasks()
 
-	c.JSON(http.StatusOK, gin.H{"message": "Deleted"})
+	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
 }
 
 // Run 手动执行任务
@@ -105,5 +105,5 @@ func (h *TaskHandler) Run(c *gin.Context) {
 	id := c.Param("id")
 	date := c.Query("date") // 可选日期参数，格式: 2006-01-02
 	h.sched.TriggerTaskRunForDate(id, date)
-	c.JSON(http.StatusOK, gin.H{"message": "Task triggered", "date": date})
+	c.JSON(http.StatusOK, gin.H{"message": "任务已触发", "date": date})
 }

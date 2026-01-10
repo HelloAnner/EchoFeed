@@ -2,9 +2,12 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -136,12 +139,12 @@ func (s *LogService) GetStatsToday() (*model.ExecutionStats, error) {
 		return nil, err
 	}
 
-	today := time.Now().Format("2006-01-02")
+	today := time.Now().In(time.Local).Format("2006-01-02")
 	stats := &model.ExecutionStats{}
 
 	var totalDuration int64
 	for _, l := range logs {
-		if l.StartTime.Format("2006-01-02") != today {
+		if l.StartTime.In(time.Local).Format("2006-01-02") != today {
 			continue
 		}
 
@@ -168,6 +171,39 @@ func (s *LogService) GetStatsToday() (*model.ExecutionStats, error) {
 	return stats, nil
 }
 
+// ClearAll 清空所有执行日志
+func (s *LogService) ClearAll() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	path := filepath.Join(s.cfgMgr.DataDir, "logs.json")
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+// PurgeBefore 清理指定时间之前的日志
+func (s *LogService) PurgeBefore(cutoff time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	logs, err := s.loadLogs()
+	if err != nil {
+		return err
+	}
+
+	var kept []model.ExecutionLog
+	for _, l := range logs {
+		if l.StartTime.Before(cutoff) {
+			continue
+		}
+		kept = append(kept, l)
+	}
+
+	return s.saveLogs(kept)
+}
+
 // loadLogs 加载日志
 func (s *LogService) loadLogs() ([]model.ExecutionLog, error) {
 	path := filepath.Join(s.cfgMgr.DataDir, "logs.json")
@@ -184,12 +220,65 @@ func (s *LogService) loadLogs() ([]model.ExecutionLog, error) {
 		return nil, err
 	}
 
+	for i := range logs {
+		logs[i].Details = localizeLogDetails(logs[i].Details)
+		logs[i].Error = localizeLogError(logs[i].Error)
+	}
+
 	// 按时间降序排序
 	sort.Slice(logs, func(i, j int) bool {
 		return logs[i].StartTime.After(logs[j].StartTime)
 	})
 
 	return logs, nil
+}
+
+var sentItemsRe = regexp.MustCompile(`^Sent\s+(\d+)\s+item\(s\)$`)
+
+func localizeLogDetails(details string) string {
+	d := strings.TrimSpace(details)
+	if d == "" {
+		return details
+	}
+
+	// 兼容旧版本英文详情
+	if m := sentItemsRe.FindStringSubmatch(d); len(m) == 2 {
+		return fmt.Sprintf("已发送 %s 条", m[1])
+	}
+	if d == "No RSS content available" {
+		return "无 RSS 内容"
+	}
+	if d == "All articles already sent" {
+		return "今日文章已全部发送"
+	}
+	if d == "No new articles since last analysis" {
+		return "与上次相比无新增文章"
+	}
+	if strings.HasPrefix(d, "No articles selected in phase 1:") {
+		return "第一阶段未选中任何文章：" + strings.TrimSpace(strings.TrimPrefix(d, "No articles selected in phase 1:"))
+	}
+	if d == "Failed to load content" {
+		return "加载文章内容失败"
+	}
+	if d == "No matching content" {
+		return "第二阶段无匹配内容"
+	}
+	if d == "All matched content already processed or below importance" {
+		return "匹配内容均已发送或重要性不足"
+	}
+
+	return details
+}
+
+func localizeLogError(errMsg string) string {
+	e := strings.TrimSpace(errMsg)
+	if e == "" {
+		return errMsg
+	}
+	if strings.HasPrefix(e, "notification failed:") {
+		return "通知发送失败：" + strings.TrimSpace(strings.TrimPrefix(e, "notification failed:"))
+	}
+	return errMsg
 }
 
 // saveLogs 保存日志

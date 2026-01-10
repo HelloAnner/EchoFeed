@@ -66,3 +66,12 @@ func (h *LogHandler) GetStatsToday(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, stats)
 }
+
+// ClearAll 一键清理执行日志
+func (h *LogHandler) ClearAll(c *gin.Context) {
+	if err := h.logSvc.ClearAll(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Cleared"})
+}

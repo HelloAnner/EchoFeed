@@ -40,7 +40,7 @@ type LogSettings struct {
 func DefaultSettings() Settings {
 	return Settings{
 		Server: ServerSettings{
-			Port: 8080,
+			Port: 33333,
 			Host: "0.0.0.0",
 		},
 		Auth: AuthSettings{

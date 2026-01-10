@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
@@ -18,6 +19,9 @@ func main() {
 	// 初始化日志
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+
+	// 时区：默认上海时区（可通过环境变量 TZ 覆盖）
+	setTimezone(getEnv("TZ", "Asia/Shanghai"))
 
 	// 数据目录
 	dataDir := getEnv("ECHOFEED_DATA_DIR", "./data")
@@ -117,6 +121,7 @@ func main() {
 		api.GET("/logs", logHandler.List)
 		api.GET("/logs/stats", logHandler.GetStats)
 		api.GET("/logs/stats/today", logHandler.GetStatsToday)
+		api.POST("/logs/clear", logHandler.ClearAll)
 
 		// Settings API
 		api.GET("/settings", settingsHandler.Get)
@@ -129,6 +134,15 @@ func main() {
 	if err := r.Run(addr); err != nil {
 		log.Fatal().Err(err).Msg("Failed to start server")
 	}
+}
+
+func setTimezone(tz string) {
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		log.Warn().Err(err).Str("tz", tz).Msg("Failed to load timezone, keep default")
+		return
+	}
+	time.Local = loc
 }
 
 func getEnv(key, defaultVal string) string {
