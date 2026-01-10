@@ -1,0 +1,102 @@
+{{define "page_index"}}
+<div class="space-y-6">
+    <!-- Stats Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="card p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-muted-foreground">RSS 订阅</p>
+                    <p class="text-2xl font-semibold mt-1">{{if .Feeds}}{{len .Feeds}}{{else}}0{{end}}</p>
+                </div>
+                <div class="p-2 bg-secondary rounded-lg">
+                    <svg class="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <div class="card p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-muted-foreground">任务数量</p>
+                    <p class="text-2xl font-semibold mt-1">{{if .Tasks}}{{len .Tasks}}{{else}}0{{end}}</p>
+                </div>
+                <div class="p-2 bg-secondary rounded-lg">
+                    <svg class="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <div class="card p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-muted-foreground">通知渠道</p>
+                    <p class="text-2xl font-semibold mt-1">{{if .Channels}}{{len .Channels}}{{else}}0{{end}}</p>
+                </div>
+                <div class="p-2 bg-secondary rounded-lg">
+                    <svg class="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <div class="card p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-muted-foreground">AI 机器人</p>
+                    <p class="text-2xl font-semibold mt-1">{{if .Bots}}{{len .Bots}}{{else}}0{{end}}</p>
+                </div>
+                <div class="p-2 bg-secondary rounded-lg">
+                    <svg class="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="card p-6">
+        <h2 class="text-lg font-semibold mb-4">快速开始</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <a href="/feeds/new" class="flex items-center gap-4 p-4 rounded-lg border hover:bg-secondary/50 transition-colors">
+                <div class="p-2 bg-secondary rounded-lg">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                </div>
+                <div>
+                    <p class="font-medium">添加 RSS 订阅</p>
+                    <p class="text-sm text-muted-foreground">添加新的 RSS 源</p>
+                </div>
+            </a>
+            <a href="/tasks/new" class="flex items-center gap-4 p-4 rounded-lg border hover:bg-secondary/50 transition-colors">
+                <div class="p-2 bg-secondary rounded-lg">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                </div>
+                <div>
+                    <p class="font-medium">创建任务</p>
+                    <p class="text-sm text-muted-foreground">配置 AI 筛选任务</p>
+                </div>
+            </a>
+            <a href="/bots/new" class="flex items-center gap-4 p-4 rounded-lg border hover:bg-secondary/50 transition-colors">
+                <div class="p-2 bg-secondary rounded-lg">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                </div>
+                <div>
+                    <p class="font-medium">添加 AI 机器人</p>
+                    <p class="text-sm text-muted-foreground">配置 AI 服务</p>
+                </div>
+            </a>
+        </div>
+    </div>
+</div>
+{{end}}

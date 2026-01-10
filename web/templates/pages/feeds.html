@@ -1,0 +1,176 @@
+{{define "page_feeds"}}
+<div class="space-y-4">
+    <div class="flex items-center justify-between">
+        <p class="text-sm text-muted-foreground">管理 RSS 订阅源</p>
+        <button onclick="openFeedModal()" class="btn btn-primary">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            添加订阅
+        </button>
+    </div>
+
+    <div class="card overflow-hidden">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>名称</th>
+                    <th>URL</th>
+                    <th>备注</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Feeds}}
+                <tr>
+                    <td class="font-medium">{{.Name}}</td>
+                    <td class="text-sm text-muted-foreground max-w-xs truncate">{{.URL}}</td>
+                    <td class="text-sm text-muted-foreground">{{.Remark}}</td>
+                    <td>
+                        {{if .Enabled}}
+                        <span class="badge badge-success">启用</span>
+                        {{else}}
+                        <span class="badge badge-muted">禁用</span>
+                        {{end}}
+                    </td>
+                    <td>
+                        <div class="flex items-center gap-1">
+                            <button onclick="refreshFeed('{{.ID}}')" class="btn btn-ghost p-2" title="刷新">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                </svg>
+                            </button>
+                            <button onclick="editFeed('{{.ID}}')" class="btn btn-ghost p-2" title="编辑">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                </svg>
+                            </button>
+                            <button onclick="deleteFeed('{{.ID}}')" class="btn btn-ghost p-2 text-destructive" title="删除">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {{else}}
+                <tr>
+                    <td colspan="5" class="text-center py-12 text-muted-foreground">
+                        暂无订阅，<button onclick="openFeedModal()" class="text-primary underline">点击添加</button>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Feed Modal -->
+<div id="feed-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-50">
+    <div class="bg-background rounded-lg p-6 w-full max-w-md shadow-lg">
+        <h3 id="feed-modal-title" class="text-lg font-semibold mb-4">添加 RSS 订阅</h3>
+        <form id="feed-form" onsubmit="saveFeed(event)">
+            <input type="hidden" id="feed-id">
+            <div class="space-y-4">
+                <div class="space-y-2">
+                    <label class="text-sm font-medium">名称 *</label>
+                    <input type="text" id="feed-name" class="input" required>
+                </div>
+                <div class="space-y-2">
+                    <label class="text-sm font-medium">URL *</label>
+                    <input type="url" id="feed-url" class="input" required>
+                </div>
+                <div class="space-y-2">
+                    <label class="text-sm font-medium">备注</label>
+                    <input type="text" id="feed-remark" class="input">
+                </div>
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" id="feed-enabled" class="rounded border-gray-300" checked>
+                    <span class="text-sm">启用</span>
+                </label>
+            </div>
+            <div class="mt-6 flex justify-end gap-3">
+                <button type="button" onclick="closeFeedModal()" class="btn btn-outline">取消</button>
+                <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openFeedModal() {
+    document.getElementById('feed-modal-title').textContent = '添加 RSS 订阅';
+    document.getElementById('feed-form').reset();
+    document.getElementById('feed-id').value = '';
+    document.getElementById('feed-enabled').checked = true;
+    document.getElementById('feed-modal').classList.remove('hidden');
+}
+
+function refreshFeed(id) {
+    fetch('/api/feeds/' + id + '/refresh', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => showToast('刷新已触发'))
+        .catch(err => showToast('操作失败', 'error'));
+}
+
+function editFeed(id) {
+    fetch('/api/feeds/' + id)
+        .then(res => res.json())
+        .then(feed => {
+            document.getElementById('feed-modal-title').textContent = '编辑订阅';
+            document.getElementById('feed-id').value = feed.id;
+            document.getElementById('feed-name').value = feed.name;
+            document.getElementById('feed-url').value = feed.url;
+            document.getElementById('feed-remark').value = feed.remark || '';
+            document.getElementById('feed-enabled').checked = feed.enabled;
+            document.getElementById('feed-modal').classList.remove('hidden');
+        });
+}
+
+function deleteFeed(id) {
+    if (confirm('确定要删除这个订阅吗？')) {
+        fetch('/api/feeds/' + id, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(data => location.reload())
+            .catch(err => showToast('删除失败', 'error'));
+    }
+}
+
+function closeFeedModal() {
+    document.getElementById('feed-modal').classList.add('hidden');
+}
+
+function saveFeed(e) {
+    e.preventDefault();
+    const id = document.getElementById('feed-id').value;
+    const feed = {
+        name: document.getElementById('feed-name').value,
+        url: document.getElementById('feed-url').value,
+        remark: document.getElementById('feed-remark').value,
+        enabled: document.getElementById('feed-enabled').checked
+    };
+
+    const method = id ? 'PUT' : 'POST';
+    const url = id ? '/api/feeds/' + id : '/api/feeds';
+
+    fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(feed)
+    })
+    .then(res => res.json())
+    .then(data => {
+        closeFeedModal();
+        showToast('保存成功');
+        setTimeout(() => location.reload(), 500);
+    })
+    .catch(err => showToast('保存失败', 'error'));
+}
+
+// Auto open modal for /feeds/new
+if (location.pathname === '/feeds/new') {
+    openFeedModal();
+}
+</script>
+{{end}}

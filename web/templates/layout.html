@@ -1,0 +1,1365 @@
+{{define "layout.html"}}
+<!DOCTYPE html>
+<html lang="zh-CN" class="antialiased">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - EchoFeed</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        border: "hsl(240 5.9% 90%)",
+                        input: "hsl(240 5.9% 90%)",
+                        ring: "hsl(240 5.9% 10%)",
+                        background: "hsl(0 0% 100%)",
+                        foreground: "hsl(240 10% 3.9%)",
+                        primary: {
+                            DEFAULT: "hsl(240 5.9% 10%)",
+                            foreground: "hsl(0 0% 98%)",
+                        },
+                        secondary: {
+                            DEFAULT: "hsl(240 4.8% 95.9%)",
+                            foreground: "hsl(240 5.9% 10%)",
+                        },
+                        muted: {
+                            DEFAULT: "hsl(240 4.8% 95.9%)",
+                            foreground: "hsl(240 3.8% 46.1%)",
+                        },
+                        accent: {
+                            DEFAULT: "hsl(240 4.8% 95.9%)",
+                            foreground: "hsl(240 5.9% 10%)",
+                        },
+                        destructive: {
+                            DEFAULT: "hsl(0 84.2% 60.2%)",
+                            foreground: "hsl(0 0% 98%)",
+                        },
+                    },
+                    borderRadius: {
+                        lg: "0.5rem",
+                        md: "calc(0.5rem - 2px)",
+                        sm: "calc(0.5rem - 4px)",
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        * {
+            border-color: hsl(240 5.9% 90%);
+        }
+        .sidebar-item {
+            transition: all 0.15s ease;
+        }
+        .sidebar-item.active {
+            background-color: hsl(240 4.8% 95.9%);
+            color: hsl(240 5.9% 10%);
+            font-weight: 500;
+        }
+        .sidebar-item:hover:not(.active) {
+            background-color: hsl(240 4.8% 95.9%);
+        }
+        .card {
+            background: white;
+            border: 1px solid hsl(240 5.9% 90%);
+            border-radius: 0.75rem;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.15s ease;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+        }
+        .btn-primary {
+            background-color: hsl(240 5.9% 10%);
+            color: hsl(0 0% 98%);
+        }
+        .btn-primary:hover {
+            background-color: hsl(240 5.9% 20%);
+        }
+        .btn-outline {
+            border: 1px solid hsl(240 5.9% 90%);
+            background: transparent;
+        }
+        .btn-outline:hover {
+            background-color: hsl(240 4.8% 95.9%);
+        }
+        .btn-ghost {
+            background: transparent;
+        }
+        .btn-ghost:hover {
+            background-color: hsl(240 4.8% 95.9%);
+        }
+        .btn-destructive {
+            background-color: hsl(0 84.2% 60.2%);
+            color: white;
+        }
+        .btn-destructive:hover {
+            background-color: hsl(0 84.2% 50%);
+        }
+        .input {
+            width: 100%;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid hsl(240 5.9% 90%);
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            transition: all 0.15s ease;
+            background: transparent;
+        }
+        .input:focus {
+            outline: none;
+            border-color: hsl(240 5.9% 10%);
+            box-shadow: 0 0 0 2px hsl(240 5.9% 90%);
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.125rem 0.625rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .badge-success {
+            background-color: hsl(142 76% 36% / 0.1);
+            color: hsl(142 76% 36%);
+        }
+        .badge-muted {
+            background-color: hsl(240 4.8% 95.9%);
+            color: hsl(240 3.8% 46.1%);
+        }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .table th {
+            text-align: left;
+            padding: 0.75rem 1rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: hsl(240 3.8% 46.1%);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid hsl(240 5.9% 90%);
+        }
+        .table td {
+            padding: 1rem;
+            border-bottom: 1px solid hsl(240 5.9% 90%);
+        }
+        .table tbody tr:hover {
+            background-color: hsl(240 4.8% 95.9% / 0.5);
+        }
+    </style>
+</head>
+<body class="bg-background text-foreground">
+    <div class="flex h-screen">
+        <!-- Sidebar -->
+        <aside class="w-64 border-r bg-background flex flex-col">
+            <!-- Logo -->
+            <div class="h-14 flex items-center px-6 border-b">
+                <a href="/" class="flex items-center gap-2">
+                    <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"/>
+                    </svg>
+                    <span class="font-semibold text-lg">EchoFeed</span>
+                </a>
+            </div>
+
+            <!-- Navigation -->
+            <nav class="flex-1 p-3 space-y-1 overflow-y-auto">
+                <a href="/" class="sidebar-item flex items-center gap-3 px-3 py-2 rounded-md text-sm {{if eq .Active "index"}}active{{end}}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                    </svg>
+                    仪表盘
+                </a>
+
+                <div class="pt-4 pb-2">
+                    <span class="px-3 text-xs font-medium text-muted-foreground">任务管理</span>
+                </div>
+                <a href="/tasks" class="sidebar-item flex items-center gap-3 px-3 py-2 rounded-md text-sm {{if eq .Active "tasks"}}active{{end}}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                    </svg>
+                    任务列表
+                </a>
+
+                <div class="pt-4 pb-2">
+                    <span class="px-3 text-xs font-medium text-muted-foreground">数据源</span>
+                </div>
+                <a href="/feeds" class="sidebar-item flex items-center gap-3 px-3 py-2 rounded-md text-sm {{if eq .Active "feeds"}}active{{end}}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"/>
+                    </svg>
+                    RSS 订阅
+                </a>
+
+                <div class="pt-4 pb-2">
+                    <span class="px-3 text-xs font-medium text-muted-foreground">配置</span>
+                </div>
+                <a href="/channels" class="sidebar-item flex items-center gap-3 px-3 py-2 rounded-md text-sm {{if eq .Active "channels"}}active{{end}}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                    </svg>
+                    通知渠道
+                </a>
+                <a href="/bots" class="sidebar-item flex items-center gap-3 px-3 py-2 rounded-md text-sm {{if eq .Active "bots"}}active{{end}}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                    </svg>
+                    AI 机器人
+                </a>
+
+                <div class="pt-4 pb-2">
+                    <span class="px-3 text-xs font-medium text-muted-foreground">系统</span>
+                </div>
+                <a href="/logs" class="sidebar-item flex items-center gap-3 px-3 py-2 rounded-md text-sm {{if eq .Active "logs"}}active{{end}}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    执行日志
+                </a>
+                <a href="/settings" class="sidebar-item flex items-center gap-3 px-3 py-2 rounded-md text-sm {{if eq .Active "settings"}}active{{end}}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                    系统设置
+                </a>
+            </nav>
+
+            <!-- Footer -->
+            <div class="p-3 border-t">
+                <div class="px-3 py-2 text-xs text-muted-foreground">
+                    EchoFeed v1.0.0
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <!-- Header -->
+            <header class="h-14 border-b bg-background flex items-center justify-between px-6">
+                <h1 class="text-lg font-semibold">{{.Title}}</h1>
+                <div class="flex items-center gap-2">
+                    <button class="btn btn-ghost p-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Content Area -->
+            <main class="flex-1 overflow-auto p-6">
+                {{if eq .Active "index"}}
+                    {{template "content_index" .}}
+                {{else if eq .Active "tasks"}}
+                    {{template "content_tasks" .}}
+                {{else if eq .Active "feeds"}}
+                    {{template "content_feeds" .}}
+                {{else if eq .Active "channels"}}
+                    {{template "content_channels" .}}
+                {{else if eq .Active "bots"}}
+                    {{template "content_bots" .}}
+                {{else if eq .Active "logs"}}
+                    {{template "content_logs" .}}
+                {{else if eq .Active "settings"}}
+                    {{template "content_settings" .}}
+                {{end}}
+            </main>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-4 right-4 hidden z-50">
+        <div id="toast-container" class="flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg border bg-background">
+            <svg id="toast-icon-success" class="w-4 h-4 text-green-600 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            <svg id="toast-icon-error" class="w-4 h-4 text-red-600 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+            <span id="toast-message" class="text-sm"></span>
+        </div>
+    </div>
+
+    <script>
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toast-message');
+            const successIcon = document.getElementById('toast-icon-success');
+            const errorIcon = document.getElementById('toast-icon-error');
+
+            toastMessage.textContent = message;
+            successIcon.classList.add('hidden');
+            errorIcon.classList.add('hidden');
+
+            if (type === 'success') {
+                successIcon.classList.remove('hidden');
+            } else {
+                errorIcon.classList.remove('hidden');
+            }
+
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 3000);
+        }
+
+        document.body.addEventListener('htmx:afterRequest', function(evt) {
+            if (evt.detail.successful) {
+                showToast('操作成功');
+            }
+        });
+    </script>
+</body>
+</html>
+{{end}}
+
+{{define "content_index"}}
+<div class="space-y-6">
+    <!-- Stats Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="card p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-muted-foreground">RSS 订阅</p>
+                    <p class="text-2xl font-semibold mt-1">{{if .Feeds}}{{len .Feeds}}{{else}}0{{end}}</p>
+                </div>
+                <div class="p-2 bg-secondary rounded-lg">
+                    <svg class="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <div class="card p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-muted-foreground">任务数量</p>
+                    <p class="text-2xl font-semibold mt-1">{{if .Tasks}}{{len .Tasks}}{{else}}0{{end}}</p>
+                </div>
+                <div class="p-2 bg-secondary rounded-lg">
+                    <svg class="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <div class="card p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-muted-foreground">通知渠道</p>
+                    <p class="text-2xl font-semibold mt-1">{{if .Channels}}{{len .Channels}}{{else}}0{{end}}</p>
+                </div>
+                <div class="p-2 bg-secondary rounded-lg">
+                    <svg class="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <div class="card p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-muted-foreground">AI 机器人</p>
+                    <p class="text-2xl font-semibold mt-1">{{if .Bots}}{{len .Bots}}{{else}}0{{end}}</p>
+                </div>
+                <div class="p-2 bg-secondary rounded-lg">
+                    <svg class="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="card p-6">
+        <h2 class="text-lg font-semibold mb-4">快速开始</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <a href="/feeds/new" class="flex items-center gap-4 p-4 rounded-lg border hover:bg-secondary/50 transition-colors">
+                <div class="p-2 bg-secondary rounded-lg">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                </div>
+                <div>
+                    <p class="font-medium">添加 RSS 订阅</p>
+                    <p class="text-sm text-muted-foreground">添加新的 RSS 源</p>
+                </div>
+            </a>
+            <a href="/tasks/new" class="flex items-center gap-4 p-4 rounded-lg border hover:bg-secondary/50 transition-colors">
+                <div class="p-2 bg-secondary rounded-lg">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                </div>
+                <div>
+                    <p class="font-medium">创建任务</p>
+                    <p class="text-sm text-muted-foreground">配置 AI 筛选任务</p>
+                </div>
+            </a>
+            <a href="/bots/new" class="flex items-center gap-4 p-4 rounded-lg border hover:bg-secondary/50 transition-colors">
+                <div class="p-2 bg-secondary rounded-lg">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                </div>
+                <div>
+                    <p class="font-medium">添加 AI 机器人</p>
+                    <p class="text-sm text-muted-foreground">配置 AI 服务</p>
+                </div>
+            </a>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "content_tasks"}}
+{{if or (eq $.Title "新建任务") (eq $.Title "任务详情")}}
+<!-- Task Form -->
+<div class="max-w-3xl">
+    <div class="card p-6">
+        <form id="task-form" onsubmit="saveTask(event)">
+            <input type="hidden" id="task-id" value="{{if .Data}}{{.Data.ID}}{{end}}">
+
+            <div class="space-y-6">
+                <!-- Basic Info -->
+                <div>
+                    <h3 class="text-base font-medium mb-4">基本信息</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium">任务名称 *</label>
+                            <input type="text" id="task-name" value="{{if .Data}}{{.Data.Name}}{{end}}" class="input" required>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium">调度周期</label>
+                            <input type="text" id="task-schedule" value="{{if .Data}}{{.Data.Schedule}}{{else}}0 9 * * *{{end}}" placeholder="0 9 * * *" class="input">
+                            <p class="text-xs text-muted-foreground">Cron 表达式，例如: 0 9 * * * (每天9点)</p>
+                        </div>
+                    </div>
+                    <div class="mt-4 space-y-2">
+                        <label class="text-sm font-medium">描述</label>
+                        <input type="text" id="task-description" value="{{if .Data}}{{.Data.Description}}{{end}}" class="input">
+                    </div>
+                </div>
+
+                <!-- AI Config -->
+                <div class="border-t pt-6">
+                    <h3 class="text-base font-medium mb-4">AI 配置</h3>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">AI 机器人 *</label>
+                        <select id="task-bot" class="input" required>
+                            <option value="">请选择 AI 机器人</option>
+                            {{range .Bots}}
+                            <option value="{{.ID}}" {{if and $.Data (eq $.Data.BotID .ID)}}selected{{end}}>{{.Name}} ({{.Provider}})</option>
+                            {{end}}
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Prompt Config -->
+                <div class="border-t pt-6">
+                    <h3 class="text-base font-medium mb-4">筛选配置</h3>
+                    <div class="space-y-4">
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium">模板类型</label>
+                            <select id="task-prompt-template" class="input" onchange="togglePromptContent()">
+                                <option value="default" {{if and .Data (eq .Data.Prompt.Template "default")}}selected{{end}}>默认模板</option>
+                                <option value="custom" {{if and .Data (eq .Data.Prompt.Template "custom")}}selected{{end}}>自定义</option>
+                            </select>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium">关键词</label>
+                            <input type="text" id="task-keywords" value="{{if .Data}}{{range $i, $k := .Data.Prompt.Keywords}}{{if $i}}, {{end}}{{$k}}{{end}}{{end}}" placeholder="AI, 机器学习, 深度学习" class="input">
+                            <p class="text-xs text-muted-foreground">多个关键词用逗号分隔</p>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium">最低重要度 (1-5)</label>
+                            <input type="number" id="task-min-importance" min="1" max="5" value="{{if .Data}}{{.Data.Prompt.MinImportance}}{{else}}3{{end}}" class="input w-24">
+                        </div>
+                        <div id="custom-prompt-container" class="space-y-2 {{if not (and .Data (eq .Data.Prompt.Template "custom"))}}hidden{{end}}">
+                            <label class="text-sm font-medium">自定义筛选提示词</label>
+                            <textarea id="task-prompt-content" rows="4" class="input" placeholder="请输入自定义筛选提示词...">{{if .Data}}{{.Data.Prompt.FilterPrompt}}{{end}}</textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Channels -->
+                <div class="border-t pt-6">
+                    <h3 class="text-base font-medium mb-4">通知渠道</h3>
+                    <div class="space-y-2">
+                        {{range .Channels}}
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" name="channels" value="{{.ID}}" class="rounded border-gray-300"
+                                {{if $.Data}}{{range $.Data.Channels}}{{if eq . $.ID}}checked{{end}}{{end}}{{end}}>
+                            <span class="text-sm">{{.Name}} ({{.Type}})</span>
+                        </label>
+                        {{else}}
+                        <p class="text-sm text-muted-foreground">暂无通知渠道，<a href="/channels/new" class="text-primary underline">点击添加</a></p>
+                        {{end}}
+                    </div>
+                </div>
+
+                <!-- Enable -->
+                <div class="border-t pt-6">
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" id="task-enabled" class="rounded border-gray-300" {{if or (not .Data) .Data.Enabled}}checked{{end}}>
+                        <span class="text-sm font-medium">启用任务</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="mt-8 flex justify-end gap-3">
+                <a href="/tasks" class="btn btn-outline">取消</a>
+                <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function togglePromptContent() {
+    const template = document.getElementById('task-prompt-template').value;
+    const container = document.getElementById('custom-prompt-container');
+    container.classList.toggle('hidden', template !== 'custom');
+}
+
+function saveTask(e) {
+    e.preventDefault();
+    const id = document.getElementById('task-id').value;
+
+    const selectedChannels = [];
+    document.querySelectorAll('input[name="channels"]:checked').forEach(cb => {
+        selectedChannels.push(cb.value);
+    });
+
+    const keywords = document.getElementById('task-keywords').value
+        .split(',')
+        .map(k => k.trim())
+        .filter(k => k);
+
+    const task = {
+        name: document.getElementById('task-name').value,
+        description: document.getElementById('task-description').value,
+        schedule: document.getElementById('task-schedule').value,
+        bot_id: document.getElementById('task-bot').value,
+        channels: selectedChannels,
+        enabled: document.getElementById('task-enabled').checked,
+        prompt: {
+            template: document.getElementById('task-prompt-template').value,
+            keywords: keywords,
+            min_importance: parseInt(document.getElementById('task-min-importance').value) || 3,
+            filter_prompt: document.getElementById('task-prompt-content').value
+        }
+    };
+
+    const method = id ? 'PUT' : 'POST';
+    const url = id ? '/api/tasks/' + id : '/api/tasks';
+
+    fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(task)
+    })
+    .then(res => {
+        if (!res.ok) throw new Error('Save failed');
+        return res.json();
+    })
+    .then(data => {
+        showToast('保存成功');
+        setTimeout(() => location.href = '/tasks', 1000);
+    })
+    .catch(err => showToast('保存失败: ' + err.message, 'error'));
+}
+</script>
+{{else}}
+<!-- Task List -->
+<div class="space-y-4">
+    <div class="flex items-center justify-between">
+        <p class="text-sm text-muted-foreground">管理你的 AI 筛选任务</p>
+        <a href="/tasks/new" class="btn btn-primary">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            新建任务
+        </a>
+    </div>
+
+    <div class="card overflow-hidden">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>任务名称</th>
+                    <th>AI 机器人</th>
+                    <th>调度周期</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Tasks}}
+                <tr>
+                    <td>
+                        <div>
+                            <p class="font-medium">{{.Name}}</p>
+                            <p class="text-sm text-muted-foreground">{{.Description}}</p>
+                        </div>
+                    </td>
+                    <td class="text-sm text-muted-foreground">{{.BotID}}</td>
+                    <td><code class="text-xs bg-secondary px-2 py-1 rounded">{{.Schedule}}</code></td>
+                    <td>
+                        {{if .Enabled}}
+                        <span class="badge badge-success">启用</span>
+                        {{else}}
+                        <span class="badge badge-muted">禁用</span>
+                        {{end}}
+                    </td>
+                    <td>
+                        <div class="flex items-center gap-1">
+                            <button onclick="runTask('{{.ID}}')" class="btn btn-ghost p-2" title="立即执行">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                            </button>
+                            <a href="/tasks/{{.ID}}" class="btn btn-ghost p-2" title="编辑">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                </svg>
+                            </a>
+                            <button onclick="deleteTask('{{.ID}}')" class="btn btn-ghost p-2 text-destructive" title="删除">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {{else}}
+                <tr>
+                    <td colspan="5" class="text-center py-12 text-muted-foreground">
+                        暂无任务，<a href="/tasks/new" class="text-primary underline">点击创建</a>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function runTask(id) {
+    fetch('/api/tasks/' + id + '/run', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => showToast('任务已触发执行'))
+        .catch(err => showToast('操作失败', 'error'));
+}
+
+function deleteTask(id) {
+    if (confirm('确定要删除这个任务吗？')) {
+        fetch('/api/tasks/' + id, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(data => location.reload())
+            .catch(err => showToast('删除失败', 'error'));
+    }
+}
+</script>
+{{end}}
+{{end}}
+
+{{define "content_feeds"}}
+<div class="space-y-4">
+    <div class="flex items-center justify-between">
+        <p class="text-sm text-muted-foreground">管理 RSS 订阅源</p>
+        <a href="/feeds/new" class="btn btn-primary">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            添加订阅
+        </a>
+    </div>
+
+    <div class="card overflow-hidden">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>名称</th>
+                    <th>URL</th>
+                    <th>备注</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Feeds}}
+                <tr>
+                    <td class="font-medium">{{.Name}}</td>
+                    <td class="text-sm text-muted-foreground max-w-xs truncate">{{.URL}}</td>
+                    <td class="text-sm text-muted-foreground">{{.Remark}}</td>
+                    <td>
+                        {{if .Enabled}}
+                        <span class="badge badge-success">启用</span>
+                        {{else}}
+                        <span class="badge badge-muted">禁用</span>
+                        {{end}}
+                    </td>
+                    <td>
+                        <div class="flex items-center gap-1">
+                            <button onclick="refreshFeed('{{.ID}}')" class="btn btn-ghost p-2" title="刷新">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                </svg>
+                            </button>
+                            <button onclick="editFeed('{{.ID}}')" class="btn btn-ghost p-2" title="编辑">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                </svg>
+                            </button>
+                            <button onclick="deleteFeed('{{.ID}}')" class="btn btn-ghost p-2 text-destructive" title="删除">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {{else}}
+                <tr>
+                    <td colspan="5" class="text-center py-12 text-muted-foreground">
+                        暂无订阅，<a href="/feeds/new" class="text-primary underline">点击添加</a>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Feed Modal -->
+<div id="feed-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-50">
+    <div class="bg-background rounded-lg p-6 w-full max-w-md shadow-lg">
+        <h3 class="text-lg font-semibold mb-4">添加 RSS 订阅</h3>
+        <form id="feed-form" onsubmit="saveFeed(event)">
+            <input type="hidden" id="feed-id">
+            <div class="space-y-4">
+                <div class="space-y-2">
+                    <label class="text-sm font-medium">名称 *</label>
+                    <input type="text" id="feed-name" class="input" required>
+                </div>
+                <div class="space-y-2">
+                    <label class="text-sm font-medium">URL *</label>
+                    <input type="url" id="feed-url" class="input" required>
+                </div>
+                <div class="space-y-2">
+                    <label class="text-sm font-medium">备注</label>
+                    <input type="text" id="feed-remark" class="input">
+                </div>
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" id="feed-enabled" class="rounded border-gray-300" checked>
+                    <span class="text-sm">启用</span>
+                </label>
+            </div>
+            <div class="mt-6 flex justify-end gap-3">
+                <button type="button" onclick="closeFeedModal()" class="btn btn-outline">取消</button>
+                <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function refreshFeed(id) {
+    fetch('/api/feeds/' + id + '/refresh', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => showToast('刷新已触发'))
+        .catch(err => showToast('操作失败', 'error'));
+}
+
+function editFeed(id) {
+    fetch('/api/feeds/' + id)
+        .then(res => res.json())
+        .then(feed => {
+            document.getElementById('feed-id').value = feed.id;
+            document.getElementById('feed-name').value = feed.name;
+            document.getElementById('feed-url').value = feed.url;
+            document.getElementById('feed-remark').value = feed.remark || '';
+            document.getElementById('feed-enabled').checked = feed.enabled;
+            document.getElementById('feed-modal').classList.remove('hidden');
+        });
+}
+
+function deleteFeed(id) {
+    if (confirm('确定要删除这个订阅吗？')) {
+        fetch('/api/feeds/' + id, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(data => location.reload())
+            .catch(err => showToast('删除失败', 'error'));
+    }
+}
+
+function closeFeedModal() {
+    document.getElementById('feed-modal').classList.add('hidden');
+    document.getElementById('feed-form').reset();
+    document.getElementById('feed-id').value = '';
+}
+
+function saveFeed(e) {
+    e.preventDefault();
+    const id = document.getElementById('feed-id').value;
+    const feed = {
+        name: document.getElementById('feed-name').value,
+        url: document.getElementById('feed-url').value,
+        remark: document.getElementById('feed-remark').value,
+        enabled: document.getElementById('feed-enabled').checked
+    };
+
+    const method = id ? 'PUT' : 'POST';
+    const url = id ? '/api/feeds/' + id : '/api/feeds';
+
+    fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(feed)
+    })
+    .then(res => res.json())
+    .then(data => {
+        closeFeedModal();
+        location.reload();
+    })
+    .catch(err => showToast('保存失败', 'error'));
+}
+
+if (location.pathname === '/feeds/new') {
+    document.getElementById('feed-modal').classList.remove('hidden');
+}
+</script>
+{{end}}
+
+{{define "content_channels"}}
+{{if or (eq $.Title "添加渠道") (eq $.Title "渠道详情")}}
+<!-- Channel Form -->
+<div class="max-w-2xl">
+    <div class="card p-6">
+        <form id="channel-form" onsubmit="saveChannel(event)">
+            <input type="hidden" id="channel-id" value="{{if .Data}}{{.Data.ID}}{{end}}">
+
+            <div class="space-y-6">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">渠道名称 *</label>
+                        <input type="text" id="channel-name" value="{{if .Data}}{{.Data.Name}}{{end}}" class="input" required>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">渠道类型 *</label>
+                        <select id="channel-type" class="input" required onchange="toggleChannelConfig()">
+                            <option value="">请选择类型</option>
+                            <option value="telegram" {{if and .Data (eq .Data.Type "telegram")}}selected{{end}}>Telegram</option>
+                            <option value="webhook" {{if and .Data (eq .Data.Type "webhook")}}selected{{end}}>Webhook</option>
+                            <option value="bark" {{if and .Data (eq .Data.Type "bark")}}selected{{end}}>Bark</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <label class="text-sm font-medium">备注</label>
+                    <input type="text" id="channel-remark" value="{{if .Data}}{{.Data.Remark}}{{end}}" class="input">
+                </div>
+
+                <!-- Telegram Config -->
+                <div id="config-telegram" class="space-y-4 hidden border-t pt-6">
+                    <h4 class="font-medium">Telegram 配置</h4>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Bot Token *</label>
+                        <input type="text" id="telegram-bot-token" value="{{if .Data}}{{index .Data.Config "bot_token"}}{{end}}" class="input font-mono text-sm">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Chat ID *</label>
+                        <input type="text" id="telegram-chat-id" value="{{if .Data}}{{index .Data.Config "chat_id"}}{{end}}" class="input font-mono text-sm">
+                    </div>
+                </div>
+
+                <!-- Webhook Config -->
+                <div id="config-webhook" class="space-y-4 hidden border-t pt-6">
+                    <h4 class="font-medium">Webhook 配置</h4>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">URL *</label>
+                        <input type="url" id="webhook-url" value="{{if .Data}}{{index .Data.Config "url"}}{{end}}" class="input">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">HTTP 方法</label>
+                        <select id="webhook-method" class="input">
+                            <option value="POST" {{if and .Data (eq (index .Data.Config "method") "POST")}}selected{{end}}>POST</option>
+                            <option value="PUT" {{if and .Data (eq (index .Data.Config "method") "PUT")}}selected{{end}}>PUT</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Bark Config -->
+                <div id="config-bark" class="space-y-4 hidden border-t pt-6">
+                    <h4 class="font-medium">Bark 配置</h4>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Device Key *</label>
+                        <input type="text" id="bark-device-key" value="{{if .Data}}{{index .Data.Config "device_key"}}{{end}}" class="input font-mono text-sm">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Server URL (可选)</label>
+                        <input type="url" id="bark-server-url" value="{{if .Data}}{{index .Data.Config "server_url"}}{{end}}" placeholder="https://api.day.app" class="input">
+                    </div>
+                </div>
+
+                <div class="border-t pt-6">
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" id="channel-enabled" class="rounded border-gray-300" {{if or (not .Data) .Data.Enabled}}checked{{end}}>
+                        <span class="text-sm font-medium">启用渠道</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="mt-8 flex justify-end gap-3">
+                <a href="/channels" class="btn btn-outline">取消</a>
+                <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function toggleChannelConfig() {
+    const type = document.getElementById('channel-type').value;
+    document.getElementById('config-telegram').classList.add('hidden');
+    document.getElementById('config-webhook').classList.add('hidden');
+    document.getElementById('config-bark').classList.add('hidden');
+    if (type) {
+        document.getElementById('config-' + type).classList.remove('hidden');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    toggleChannelConfig();
+});
+
+function saveChannel(e) {
+    e.preventDefault();
+    const id = document.getElementById('channel-id').value;
+    const type = document.getElementById('channel-type').value;
+
+    let config = {};
+    if (type === 'telegram') {
+        config = {
+            bot_token: document.getElementById('telegram-bot-token').value,
+            chat_id: document.getElementById('telegram-chat-id').value
+        };
+    } else if (type === 'webhook') {
+        config = {
+            url: document.getElementById('webhook-url').value,
+            method: document.getElementById('webhook-method').value
+        };
+    } else if (type === 'bark') {
+        config = {
+            device_key: document.getElementById('bark-device-key').value,
+            server_url: document.getElementById('bark-server-url').value
+        };
+    }
+
+    const channel = {
+        name: document.getElementById('channel-name').value,
+        type: type,
+        remark: document.getElementById('channel-remark').value,
+        config: config,
+        enabled: document.getElementById('channel-enabled').checked
+    };
+
+    const method = id ? 'PUT' : 'POST';
+    const url = id ? '/api/channels/' + id : '/api/channels';
+
+    fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(channel)
+    })
+    .then(res => {
+        if (!res.ok) throw new Error('Save failed');
+        return res.json();
+    })
+    .then(data => {
+        showToast('保存成功');
+        setTimeout(() => location.href = '/channels', 1000);
+    })
+    .catch(err => showToast('保存失败: ' + err.message, 'error'));
+}
+</script>
+{{else}}
+<!-- Channel List -->
+<div class="space-y-4">
+    <div class="flex items-center justify-between">
+        <p class="text-sm text-muted-foreground">配置通知推送渠道</p>
+        <a href="/channels/new" class="btn btn-primary">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            添加渠道
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {{range .Channels}}
+        <div class="card p-5">
+            <div class="flex items-start justify-between mb-3">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-secondary rounded-lg">
+                        {{if eq .Type "telegram"}}
+                        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.2-.04-.28-.02-.12.03-1.99 1.27-5.62 3.72-.53.36-1.01.54-1.44.53-.47-.01-1.38-.27-2.06-.49-.83-.27-1.49-.42-1.43-.89.03-.24.37-.49 1.02-.74 3.99-1.74 6.65-2.89 7.99-3.45 3.8-1.6 4.59-1.88 5.1-1.89.11 0 .37.03.54.17.14.12.18.28.2.45-.01.06.01.24 0 .38z"/>
+                        </svg>
+                        {{else}}
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                        </svg>
+                        {{end}}
+                    </div>
+                    <div>
+                        <h3 class="font-medium">{{.Name}}</h3>
+                        <p class="text-sm text-muted-foreground">{{.Type}}</p>
+                    </div>
+                </div>
+                {{if .Enabled}}
+                <span class="badge badge-success">启用</span>
+                {{else}}
+                <span class="badge badge-muted">禁用</span>
+                {{end}}
+            </div>
+            <p class="text-sm text-muted-foreground mb-4">{{.Remark}}</p>
+            <div class="flex gap-2">
+                <button onclick="testChannel('{{.ID}}')" class="btn btn-outline flex-1 text-sm">测试</button>
+                <a href="/channels/{{.ID}}" class="btn btn-outline flex-1 text-sm">编辑</a>
+                <button onclick="deleteChannel('{{.ID}}')" class="btn btn-ghost p-2 text-destructive">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        {{else}}
+        <div class="col-span-full text-center py-12 text-muted-foreground">
+            暂无通知渠道，<a href="/channels/new" class="text-primary underline">点击添加</a>
+        </div>
+        {{end}}
+    </div>
+</div>
+
+<script>
+function testChannel(id) {
+    fetch('/api/channels/' + id + '/test', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => showToast('测试消息已发送'))
+        .catch(err => showToast('测试失败', 'error'));
+}
+
+function deleteChannel(id) {
+    if (confirm('确定要删除这个渠道吗？')) {
+        fetch('/api/channels/' + id, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(data => location.reload())
+            .catch(err => showToast('删除失败', 'error'));
+    }
+}
+</script>
+{{end}}
+{{end}}
+
+{{define "content_bots"}}
+{{if or (eq $.Title "添加机器人") (eq $.Title "机器人详情")}}
+<!-- Bot Form -->
+<div class="max-w-2xl">
+    <div class="card p-6">
+        <form id="bot-form" onsubmit="saveBot(event)">
+            <input type="hidden" id="bot-id" value="{{if .Data}}{{.Data.ID}}{{end}}">
+
+            <div class="space-y-6">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">机器人名称 *</label>
+                        <input type="text" id="bot-name" value="{{if .Data}}{{.Data.Name}}{{end}}" class="input" required>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">AI 服务提供商 *</label>
+                        <select id="bot-provider" class="input" required onchange="toggleBotConfig()">
+                            <option value="">请选择提供商</option>
+                            <option value="openai" {{if and .Data (eq .Data.Provider "openai")}}selected{{end}}>OpenAI</option>
+                            <option value="claude" {{if and .Data (eq .Data.Provider "claude")}}selected{{end}}>Claude (Anthropic)</option>
+                            <option value="ollama" {{if and .Data (eq .Data.Provider "ollama")}}selected{{end}}>Ollama (本地)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <label class="text-sm font-medium">备注</label>
+                    <input type="text" id="bot-remark" value="{{if .Data}}{{.Data.Remark}}{{end}}" class="input">
+                </div>
+
+                <!-- OpenAI Config -->
+                <div id="config-openai" class="space-y-4 hidden border-t pt-6">
+                    <h4 class="font-medium">OpenAI 配置</h4>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">API Key *</label>
+                        <input type="password" id="openai-api-key" value="{{if .Data}}{{index .Data.Config "api_key"}}{{end}}" class="input font-mono text-sm">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">模型</label>
+                        <input type="text" id="openai-model" value="{{if .Data}}{{index .Data.Config "model"}}{{else}}gpt-4o-mini{{end}}" placeholder="gpt-4o-mini" class="input">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Base URL (可选)</label>
+                        <input type="url" id="openai-base-url" value="{{if .Data}}{{index .Data.Config "base_url"}}{{end}}" placeholder="https://api.openai.com/v1" class="input">
+                    </div>
+                </div>
+
+                <!-- Claude Config -->
+                <div id="config-claude" class="space-y-4 hidden border-t pt-6">
+                    <h4 class="font-medium">Claude 配置</h4>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">API Key *</label>
+                        <input type="password" id="claude-api-key" value="{{if .Data}}{{index .Data.Config "api_key"}}{{end}}" class="input font-mono text-sm">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">模型</label>
+                        <input type="text" id="claude-model" value="{{if .Data}}{{index .Data.Config "model"}}{{else}}claude-sonnet-4-20250514{{end}}" placeholder="claude-sonnet-4-20250514" class="input">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Base URL (可选)</label>
+                        <input type="url" id="claude-base-url" value="{{if .Data}}{{index .Data.Config "base_url"}}{{end}}" placeholder="https://api.anthropic.com/v1" class="input">
+                    </div>
+                </div>
+
+                <!-- Ollama Config -->
+                <div id="config-ollama" class="space-y-4 hidden border-t pt-6">
+                    <h4 class="font-medium">Ollama 配置</h4>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Base URL</label>
+                        <input type="url" id="ollama-base-url" value="{{if .Data}}{{index .Data.Config "base_url"}}{{else}}http://localhost:11434{{end}}" placeholder="http://localhost:11434" class="input">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">模型</label>
+                        <input type="text" id="ollama-model" value="{{if .Data}}{{index .Data.Config "model"}}{{else}}llama3{{end}}" placeholder="llama3" class="input">
+                    </div>
+                </div>
+
+                <div class="border-t pt-6">
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" id="bot-enabled" class="rounded border-gray-300" {{if or (not .Data) .Data.Enabled}}checked{{end}}>
+                        <span class="text-sm font-medium">启用机器人</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="mt-8 flex justify-end gap-3">
+                <a href="/bots" class="btn btn-outline">取消</a>
+                <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function toggleBotConfig() {
+    const provider = document.getElementById('bot-provider').value;
+    document.getElementById('config-openai').classList.add('hidden');
+    document.getElementById('config-claude').classList.add('hidden');
+    document.getElementById('config-ollama').classList.add('hidden');
+    if (provider) {
+        document.getElementById('config-' + provider).classList.remove('hidden');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    toggleBotConfig();
+});
+
+function saveBot(e) {
+    e.preventDefault();
+    const id = document.getElementById('bot-id').value;
+    const provider = document.getElementById('bot-provider').value;
+
+    let config = {};
+    if (provider === 'openai') {
+        config = {
+            api_key: document.getElementById('openai-api-key').value,
+            model: document.getElementById('openai-model').value,
+            base_url: document.getElementById('openai-base-url').value
+        };
+    } else if (provider === 'claude') {
+        config = {
+            api_key: document.getElementById('claude-api-key').value,
+            model: document.getElementById('claude-model').value,
+            base_url: document.getElementById('claude-base-url').value
+        };
+    } else if (provider === 'ollama') {
+        config = {
+            base_url: document.getElementById('ollama-base-url').value,
+            model: document.getElementById('ollama-model').value
+        };
+    }
+
+    const bot = {
+        name: document.getElementById('bot-name').value,
+        provider: provider,
+        remark: document.getElementById('bot-remark').value,
+        config: config,
+        enabled: document.getElementById('bot-enabled').checked
+    };
+
+    const method = id ? 'PUT' : 'POST';
+    const url = id ? '/api/bots/' + id : '/api/bots';
+
+    fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bot)
+    })
+    .then(res => {
+        if (!res.ok) throw new Error('Save failed');
+        return res.json();
+    })
+    .then(data => {
+        showToast('保存成功');
+        setTimeout(() => location.href = '/bots', 1000);
+    })
+    .catch(err => showToast('保存失败: ' + err.message, 'error'));
+}
+</script>
+{{else}}
+<!-- Bot List -->
+<div class="space-y-4">
+    <div class="flex items-center justify-between">
+        <p class="text-sm text-muted-foreground">配置 AI 机器人</p>
+        <a href="/bots/new" class="btn btn-primary">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            添加机器人
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {{range .Bots}}
+        <div class="card p-5">
+            <div class="flex items-start justify-between mb-3">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-secondary rounded-lg">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="font-medium">{{.Name}}</h3>
+                        <p class="text-sm text-muted-foreground">{{.Provider}}</p>
+                    </div>
+                </div>
+                {{if .Enabled}}
+                <span class="badge badge-success">启用</span>
+                {{else}}
+                <span class="badge badge-muted">禁用</span>
+                {{end}}
+            </div>
+            <p class="text-sm text-muted-foreground mb-4">{{.Remark}}</p>
+            <div class="flex gap-2">
+                <button onclick="testBot('{{.ID}}')" class="btn btn-outline flex-1 text-sm">测试</button>
+                <a href="/bots/{{.ID}}" class="btn btn-outline flex-1 text-sm">编辑</a>
+                <button onclick="deleteBot('{{.ID}}')" class="btn btn-ghost p-2 text-destructive">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        {{else}}
+        <div class="col-span-full text-center py-12 text-muted-foreground">
+            暂无 AI 机器人，<a href="/bots/new" class="text-primary underline">点击添加</a>
+        </div>
+        {{end}}
+    </div>
+</div>
+
+<script>
+function testBot(id) {
+    fetch('/api/bots/' + id + '/test', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => showToast('AI 测试成功'))
+        .catch(err => showToast('测试失败', 'error'));
+}
+
+function deleteBot(id) {
+    if (confirm('确定要删除这个机器人吗？')) {
+        fetch('/api/bots/' + id, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(data => location.reload())
+            .catch(err => showToast('删除失败', 'error'));
+    }
+}
+</script>
+{{end}}
+{{end}}
+
+{{define "content_logs"}}
+<div class="card p-12">
+    <div class="text-center">
+        <svg class="w-12 h-12 mx-auto text-muted-foreground/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        <p class="mt-4 text-muted-foreground">执行日志功能开发中...</p>
+    </div>
+</div>
+{{end}}
+
+{{define "content_settings"}}
+<div class="max-w-2xl">
+    <div class="card p-6">
+        <h2 class="text-lg font-semibold mb-6">系统设置</h2>
+        <form class="space-y-6">
+            <div class="grid grid-cols-2 gap-4">
+                <div class="space-y-2">
+                    <label class="text-sm font-medium">服务端口</label>
+                    <input type="number" value="{{if .Data}}{{.Data.Server.Port}}{{else}}8080{{end}}" class="input" disabled>
+                </div>
+                <div class="space-y-2">
+                    <label class="text-sm font-medium">RSS 拉取间隔 (分钟)</label>
+                    <input type="number" value="{{if .Data}}{{.Data.Fetch.DefaultInterval}}{{else}}5{{end}}" class="input">
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="space-y-2">
+                    <label class="text-sm font-medium">请求超时 (秒)</label>
+                    <input type="number" value="{{if .Data}}{{.Data.Fetch.Timeout}}{{else}}30{{end}}" class="input">
+                </div>
+                <div class="space-y-2">
+                    <label class="text-sm font-medium">最大并发数</label>
+                    <input type="number" value="{{if .Data}}{{.Data.Fetch.MaxConcurrent}}{{else}}5{{end}}" class="input">
+                </div>
+            </div>
+            <div class="space-y-2">
+                <label class="text-sm font-medium">日志级别</label>
+                <select class="input">
+                    <option value="debug">Debug</option>
+                    <option value="info" selected>Info</option>
+                    <option value="warn">Warn</option>
+                    <option value="error">Error</option>
+                </select>
+            </div>
+            <div class="pt-4">
+                <button type="submit" class="btn btn-primary">保存设置</button>
+            </div>
+        </form>
+    </div>
+</div>
+{{end}}

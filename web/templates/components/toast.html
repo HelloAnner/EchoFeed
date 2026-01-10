@@ -1,0 +1,41 @@
+{{define "toast"}}
+<div id="toast" class="fixed bottom-4 right-4 hidden z-50">
+    <div id="toast-container" class="flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg border bg-background">
+        <svg id="toast-icon-success" class="w-4 h-4 text-green-600 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+        </svg>
+        <svg id="toast-icon-error" class="w-4 h-4 text-red-600 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+        <span id="toast-message" class="text-sm"></span>
+    </div>
+</div>
+
+<script>
+    function showToast(message, type = 'success') {
+        const toast = document.getElementById('toast');
+        const toastMessage = document.getElementById('toast-message');
+        const successIcon = document.getElementById('toast-icon-success');
+        const errorIcon = document.getElementById('toast-icon-error');
+
+        toastMessage.textContent = message;
+        successIcon.classList.add('hidden');
+        errorIcon.classList.add('hidden');
+
+        if (type === 'success') {
+            successIcon.classList.remove('hidden');
+        } else {
+            errorIcon.classList.remove('hidden');
+        }
+
+        toast.classList.remove('hidden');
+        setTimeout(() => toast.classList.add('hidden'), 3000);
+    }
+
+    document.body.addEventListener('htmx:afterRequest', function(evt) {
+        if (evt.detail.successful) {
+            showToast('操作成功');
+        }
+    });
+</script>
+{{end}}

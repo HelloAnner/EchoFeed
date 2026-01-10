@@ -1,0 +1,231 @@
+{{define "page_channels"}}
+{{if or (eq $.Title "添加渠道") (eq $.Title "渠道详情")}}
+<!-- Channel Form -->
+<div class="max-w-2xl">
+    <div class="card p-6">
+        <form id="channel-form" onsubmit="saveChannel(event)">
+            <input type="hidden" id="channel-id" value="{{if .Data}}{{.Data.ID}}{{end}}">
+
+            <div class="space-y-6">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">渠道名称 *</label>
+                        <input type="text" id="channel-name" value="{{if .Data}}{{.Data.Name}}{{end}}" class="input" required>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">渠道类型 *</label>
+                        <select id="channel-type" class="input" required onchange="toggleChannelConfig()">
+                            <option value="">请选择类型</option>
+                            <option value="telegram" {{if and .Data (eq .Data.Type "telegram")}}selected{{end}}>Telegram</option>
+                            <option value="webhook" {{if and .Data (eq .Data.Type "webhook")}}selected{{end}}>Webhook</option>
+                            <option value="bark" {{if and .Data (eq .Data.Type "bark")}}selected{{end}}>Bark</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <label class="text-sm font-medium">备注</label>
+                    <input type="text" id="channel-remark" value="{{if .Data}}{{.Data.Remark}}{{end}}" class="input">
+                </div>
+
+                <!-- Telegram Config -->
+                <div id="config-telegram" class="space-y-4 hidden border-t pt-6">
+                    <h4 class="font-medium">Telegram 配置</h4>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Bot Token *</label>
+                        <input type="text" id="telegram-bot-token" value="{{if .Data}}{{index .Data.Config "bot_token"}}{{end}}" class="input font-mono text-sm">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Chat ID *</label>
+                        <input type="text" id="telegram-chat-id" value="{{if .Data}}{{index .Data.Config "chat_id"}}{{end}}" class="input font-mono text-sm">
+                    </div>
+                </div>
+
+                <!-- Webhook Config -->
+                <div id="config-webhook" class="space-y-4 hidden border-t pt-6">
+                    <h4 class="font-medium">Webhook 配置</h4>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">URL *</label>
+                        <input type="url" id="webhook-url" value="{{if .Data}}{{index .Data.Config "url"}}{{end}}" class="input">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">HTTP 方法</label>
+                        <select id="webhook-method" class="input">
+                            <option value="POST" {{if and .Data (eq (index .Data.Config "method") "POST")}}selected{{end}}>POST</option>
+                            <option value="PUT" {{if and .Data (eq (index .Data.Config "method") "PUT")}}selected{{end}}>PUT</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Bark Config -->
+                <div id="config-bark" class="space-y-4 hidden border-t pt-6">
+                    <h4 class="font-medium">Bark 配置</h4>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Device Key *</label>
+                        <input type="text" id="bark-device-key" value="{{if .Data}}{{index .Data.Config "device_key"}}{{end}}" class="input font-mono text-sm">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Server URL (可选)</label>
+                        <input type="url" id="bark-server-url" value="{{if .Data}}{{index .Data.Config "server_url"}}{{end}}" placeholder="https://api.day.app" class="input">
+                    </div>
+                </div>
+
+                <div class="border-t pt-6">
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" id="channel-enabled" class="rounded border-gray-300" {{if or (not .Data) .Data.Enabled}}checked{{end}}>
+                        <span class="text-sm font-medium">启用渠道</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="mt-8 flex justify-end gap-3">
+                <a href="/channels" class="btn btn-outline">取消</a>
+                <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function toggleChannelConfig() {
+    const type = document.getElementById('channel-type').value;
+    document.getElementById('config-telegram').classList.add('hidden');
+    document.getElementById('config-webhook').classList.add('hidden');
+    document.getElementById('config-bark').classList.add('hidden');
+    if (type) {
+        document.getElementById('config-' + type).classList.remove('hidden');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    toggleChannelConfig();
+});
+
+function saveChannel(e) {
+    e.preventDefault();
+    const id = document.getElementById('channel-id').value;
+    const type = document.getElementById('channel-type').value;
+
+    let config = {};
+    if (type === 'telegram') {
+        config = {
+            bot_token: document.getElementById('telegram-bot-token').value,
+            chat_id: document.getElementById('telegram-chat-id').value
+        };
+    } else if (type === 'webhook') {
+        config = {
+            url: document.getElementById('webhook-url').value,
+            method: document.getElementById('webhook-method').value
+        };
+    } else if (type === 'bark') {
+        config = {
+            device_key: document.getElementById('bark-device-key').value,
+            server_url: document.getElementById('bark-server-url').value
+        };
+    }
+
+    const channel = {
+        name: document.getElementById('channel-name').value,
+        type: type,
+        remark: document.getElementById('channel-remark').value,
+        config: config,
+        enabled: document.getElementById('channel-enabled').checked
+    };
+
+    const method = id ? 'PUT' : 'POST';
+    const url = id ? '/api/channels/' + id : '/api/channels';
+
+    fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(channel)
+    })
+    .then(res => {
+        if (!res.ok) throw new Error('Save failed');
+        return res.json();
+    })
+    .then(data => {
+        showToast('保存成功');
+        setTimeout(() => location.href = '/channels', 1000);
+    })
+    .catch(err => showToast('保存失败: ' + err.message, 'error'));
+}
+</script>
+{{else}}
+<!-- Channel List -->
+<div class="space-y-4">
+    <div class="flex items-center justify-between">
+        <p class="text-sm text-muted-foreground">配置通知推送渠道</p>
+        <a href="/channels/new" class="btn btn-primary">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            添加渠道
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {{range .Channels}}
+        <div class="card p-5">
+            <div class="flex items-start justify-between mb-3">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-secondary rounded-lg">
+                        {{if eq .Type "telegram"}}
+                        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.2-.04-.28-.02-.12.03-1.99 1.27-5.62 3.72-.53.36-1.01.54-1.44.53-.47-.01-1.38-.27-2.06-.49-.83-.27-1.49-.42-1.43-.89.03-.24.37-.49 1.02-.74 3.99-1.74 6.65-2.89 7.99-3.45 3.8-1.6 4.59-1.88 5.1-1.89.11 0 .37.03.54.17.14.12.18.28.2.45-.01.06.01.24 0 .38z"/>
+                        </svg>
+                        {{else}}
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                        </svg>
+                        {{end}}
+                    </div>
+                    <div>
+                        <h3 class="font-medium">{{.Name}}</h3>
+                        <p class="text-sm text-muted-foreground">{{.Type}}</p>
+                    </div>
+                </div>
+                {{if .Enabled}}
+                <span class="badge badge-success">启用</span>
+                {{else}}
+                <span class="badge badge-muted">禁用</span>
+                {{end}}
+            </div>
+            <p class="text-sm text-muted-foreground mb-4">{{.Remark}}</p>
+            <div class="flex gap-2">
+                <button onclick="testChannel('{{.ID}}')" class="btn btn-outline flex-1 text-sm">测试</button>
+                <a href="/channels/{{.ID}}" class="btn btn-outline flex-1 text-sm">编辑</a>
+                <button onclick="deleteChannel('{{.ID}}')" class="btn btn-ghost p-2 text-destructive">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        {{else}}
+        <div class="col-span-full text-center py-12 text-muted-foreground">
+            暂无通知渠道，<a href="/channels/new" class="text-primary underline">点击添加</a>
+        </div>
+        {{end}}
+    </div>
+</div>
+
+<script>
+function testChannel(id) {
+    fetch('/api/channels/' + id + '/test', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => showToast('测试消息已发送'))
+        .catch(err => showToast('测试失败', 'error'));
+}
+
+function deleteChannel(id) {
+    if (confirm('确定要删除这个渠道吗？')) {
+        fetch('/api/channels/' + id, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(data => location.reload())
+            .catch(err => showToast('删除失败', 'error'));
+    }
+}
+</script>
+{{end}}
+{{end}}
