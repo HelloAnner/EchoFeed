@@ -610,7 +610,7 @@ func (h *PageHandler) Logs(c *gin.Context) {
 			page = v
 		}
 	}
-	pageSize := 10
+	pageSize := 8
 
 	logs, _ := h.logSvc.List(0)
 	stats, _ := h.logSvc.GetStats()
