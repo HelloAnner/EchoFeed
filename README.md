@@ -1,38 +1,72 @@
 # EchoFeed
 
-一个自托管的 RSS 聚合与 AI 筛选推送工具：定时拉取 RSS → 任务按提示词筛选 → 通过通知渠道推送（支持企业微信机器人）。
+Self-hosted RSS aggregation + AI filtering + notifications: pull RSS on schedule → filter with tasks/prompts → push via notification channels (WeCom bot supported).
 
-## 功能
+中文文档：`README.zh-CN.md`
 
-- RSS 订阅管理与定时拉取
-- 任务：按关键词/提示词筛选内容，控制最低重要性
-- 推送：企业微信/Webhook/Telegram/Email/Bark
-- 任务级去重：同一任务不会重复推送同一篇文章
-- Web UI：配置与管理（任务/订阅/渠道/机器人/日志）
+## Features
 
-## 快速启动（Docker）
+- RSS subscription management and scheduled fetching
+- Tasks: filter by keywords/prompts with minimum importance threshold
+- Notifications: WeCom / Webhook / Telegram / Email / Bark
+- Task-level deduplication: no duplicate pushes for the same post in the same task
+- Web UI: manage tasks/subscriptions/channels/bots/logs
 
-前置：已安装 Docker + Docker Compose。
+## Quick Start (Docker)
+
+Prerequisites: Docker + Docker Compose installed.
 
 ```bash
 make start
 ```
 
-访问：
+Access:
 - `http://localhost:33333`
 
-常用命令：
+Common commands:
 ```bash
 make restart
 make stop
 ```
 
-## 配置
+## Web UI Screenshots
 
-配置文件默认在 `./data/`：
-- `data/rss.toml`：RSS 源
-- `data/tasks.toml`：任务
-- `data/channels.toml`：通知渠道
-- `data/bots.toml`：AI 机器人
-- `data/settings.toml`：服务端口等
+Screenshots are taken from the Web UI after starting locally (`http://localhost:33333` / `http://127.0.0.1:33333`), one per left sidebar entry.
+
+### Dashboard
+
+![Dashboard](img/dashboard.png)
+
+### Tasks
+
+![Tasks](img/tasks.png)
+
+### RSS Feeds
+
+![RSS Feeds](img/feeds.png)
+
+### Notification Channels
+
+![Notification Channels](img/channels.png)
+
+### AI Bots
+
+![AI Bots](img/bots.png)
+
+### Execution Logs
+
+![Execution Logs](img/logs.png)
+
+### Settings
+
+![Settings](img/settings.png)
+
+## Configuration
+
+Config files are stored in `./data/` by default:
+- `data/rss.toml`: RSS sources
+- `data/tasks.toml`: tasks
+- `data/channels.toml`: notification channels
+- `data/bots.toml`: AI bots
+- `data/settings.toml`: server port and settings
 
