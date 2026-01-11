@@ -130,7 +130,7 @@ const DefaultFilterPrompt = `筛选要求：
 // DefaultTaskOutputFormat 默认“输出格式”（供 UI/迁移使用）
 const DefaultTaskOutputFormat = `请对每篇符合条件的文章输出一个 JSON item，字段要求：
 - title：原始标题
-- summary：中文概述（完整版本，不要省略号）
+- summary：中文描述。必须包含：①【概述】1-2句；②【关键核心】3-5条要点（条目化）；③【不可忽视的结论】1句给出最重要的行动/判断/影响
 - importance：1-5（克制评分）
 - keywords：3-5个关键词
 - source：信息来源

@@ -74,7 +74,7 @@
                         </div>
                         <div class="space-y-2 xl:col-span-1">
                             <label class="text-sm font-medium">输出格式</label>
-                            <textarea id="task-output-format" rows="12" class="input" placeholder="例如：每篇文章输出：核心结论 + 关键点（条目化）+ 关键词 + 重要性评分；summary 不要省略号。">{{if .Data}}{{.Data.Prompt.OutputFormat}}{{end}}</textarea>
+                            <textarea id="task-output-format" rows="12" class="input" placeholder="例如：summary 需要包含【概述】+【关键核心】+【不可忽视的结论】，并给出关键词与重要性评分；summary 不要省略号。">{{if .Data}}{{.Data.Prompt.OutputFormat}}{{end}}</textarea>
                             <p class="text-xs text-muted-foreground">用于第二阶段：分析本地 txt 正文并按此格式组织每篇文章的输出。</p>
                         </div>
                     </div>
@@ -304,7 +304,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const outputEl = document.getElementById('task-output-format');
     if (outputEl && !outputEl.value.trim()) {
-        outputEl.value = '请对每篇文章输出一个 JSON item，字段要求：\n- title：原始标题\n- summary：中文概述（完整版本，不要省略号）\n- importance：1-5（克制评分）\n- keywords：3-5个关键词\n- source：信息来源\n- link：原文链接\n- article_id：文章ID（如果已知）\n- published_at：发布时间（上海时区，格式 2006-01-02 15:04）\n';
+        outputEl.value = '请对每篇文章输出一个 JSON item，字段要求：\n- title：原始标题\n- summary：中文概述（完整版本，不要省略号）。必须包含：①【概述】1-2句；②【关键核心】3-5条要点（条目化）；③【不可忽视的结论】1句给出最重要的行动/判断/影响\n- importance：1-5（克制评分）\n- keywords：3-5个关键词\n- source：信息来源\n- link：原文链接\n- article_id：文章ID（如果已知）\n- published_at：发布时间（上海时区，格式 2006-01-02 15:04）\n';
     }
 });
 
