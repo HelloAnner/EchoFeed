@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+
 package model
 
 import "time"
@@ -12,12 +14,13 @@ type FeedSettings struct {
 
 // Feed RSS订阅源
 type Feed struct {
-	ID       string `toml:"id" json:"id"`
-	Name     string `toml:"name" json:"name"`
-	URL      string `toml:"url" json:"url"`
-	Remark   string `toml:"remark" json:"remark"`
-	Interval int    `toml:"interval,omitempty" json:"interval"` // 可选，覆盖默认间隔
-	Enabled  bool   `toml:"enabled" json:"enabled"`
+	ID       string   `toml:"id" json:"id"`
+	Name     string   `toml:"name" json:"name"`
+	URL      string   `toml:"url" json:"url"`
+	Remark   string   `toml:"remark" json:"remark"`
+	Interval int      `toml:"interval,omitempty" json:"interval"` // 可选，覆盖默认间隔
+	Tags     []string `toml:"tags,omitempty" json:"tags"`         // 订阅标签（用于筛选/分组）
+	Enabled  bool     `toml:"enabled" json:"enabled"`
 }
 
 // FeedConfig RSS配置文件结构

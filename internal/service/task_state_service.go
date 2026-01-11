@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 // 任务去重状态存储：按任务记录已处理文章ID，避免重复推送。
 // @author Anner
 // Created on 2026/1/10

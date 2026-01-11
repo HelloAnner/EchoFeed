@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 // 数据清理任务：保留最近 N 天的 RSS 文章与执行日志。
 // @author Anner
 // Created on 2026/1/10

@@ -8,5 +8,6 @@ services:
       - "33333:33333"
     volumes:
       - ./data:/app/data
+      - ./bak:/app/bak
     environment:
       - TZ=Asia/Shanghai

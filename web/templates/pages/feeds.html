@@ -1,3 +1,4 @@
+{{/* SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0 */}}
 {{define "page_feeds"}}
 <div class="space-y-4">
     <div class="flex items-center justify-between">
@@ -20,9 +21,17 @@
 
     <div class="flex items-center justify-between gap-3">
         <form method="GET" action="/feeds" class="flex-1 flex items-center gap-2">
-            <input type="text" name="q" value="{{.Feeds.Query}}" class="input max-w-md" placeholder="搜索名称/URL/备注/ID（模糊匹配）">
+            <input type="text" name="q" value="{{.Feeds.Query}}" class="input max-w-md" placeholder="搜索名称/备注/ID（模糊匹配）">
+            <div class="w-64">
+                <div id="feed-tags-filter"></div>
+                <div id="feed-tags-filter-hidden">
+                    {{range .Feeds.TagsSelected}}
+                    <input type="hidden" name="tag" value="{{.}}">
+                    {{end}}
+                </div>
+            </div>
             <button type="submit" class="btn btn-outline">搜索</button>
-            {{if .Feeds.Query}}
+            {{if or .Feeds.Query (gt (len .Feeds.TagsSelected) 0)}}
             <a href="/feeds" class="btn btn-ghost">清空</a>
             {{end}}
         </form>
@@ -37,9 +46,9 @@
                 <tr>
                     <th>名称</th>
                     <th>备注</th>
+                    <th class="whitespace-nowrap">标签</th>
                     <th class="whitespace-nowrap">今日文章</th>
                     <th class="whitespace-nowrap">上次更新</th>
-                    <th class="whitespace-nowrap">下次更新</th>
                     <th>状态</th>
                     <th>操作</th>
                 </tr>
@@ -48,10 +57,26 @@
                 {{range .Feeds.Items}}
                 <tr>
                     <td class="font-medium">{{.Name}}</td>
-                    <td class="text-sm text-muted-foreground">{{.Remark}}</td>
+                    <td class="text-sm text-muted-foreground">
+                        {{if .Remark}}
+                        <div class="max-w-[280px] truncate" data-tooltip="{{.Remark}}">{{.Remark}}</div>
+                        {{else}}
+                        -
+                        {{end}}
+                    </td>
+                    <td class="text-sm text-muted-foreground whitespace-nowrap">
+                        {{if .Tags}}
+                            <div class="flex flex-wrap gap-1">
+                                {{range .Tags}}
+                                    <span data-tag-badge="1" data-tag="{{.}}" class="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium">{{.}}</span>
+                                {{end}}
+                            </div>
+                        {{else}}
+                            -
+                        {{end}}
+                    </td>
                     <td class="text-sm text-muted-foreground whitespace-nowrap">{{.TodayCount}}</td>
                     <td class="text-sm text-muted-foreground whitespace-nowrap">{{.LastUpdate}}</td>
-                    <td class="text-sm text-muted-foreground whitespace-nowrap">{{.NextUpdate}}</td>
                     <td>
                         {{if .Enabled}}
                         <span class="badge badge-success">启用</span>
@@ -61,13 +86,13 @@
                     </td>
 	                    <td>
 	                        <div class="flex items-center gap-1">
-	                            <button onclick="refreshFeed('{{.ID}}')" class="btn btn-ghost text-sm" title="刷新">刷新</button>
-	                            <button onclick="editFeed('{{.ID}}')" class="btn btn-ghost p-2" title="编辑">
+	                            <button onclick="refreshFeed('{{.ID}}')" class="btn btn-ghost text-sm" data-tooltip="刷新">刷新</button>
+	                            <button onclick="editFeed('{{.ID}}')" class="btn btn-ghost p-2" data-tooltip="编辑">
 	                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 	                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
 	                                </svg>
                             </button>
-                            <button onclick="deleteFeed('{{.ID}}')" class="btn btn-ghost p-2 text-destructive" title="删除">
+                            <button onclick="deleteFeed('{{.ID}}')" class="btn btn-ghost p-2 text-destructive" data-tooltip="删除">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                                 </svg>
@@ -96,13 +121,13 @@
         </div>
         <div class="flex items-center gap-2">
             {{if gt .Feeds.Page 1}}
-            <a class="btn btn-outline" href="/feeds?page={{add .Feeds.Page -1}}{{if .Feeds.Query}}&q={{.Feeds.Query | urlquery}}{{end}}">上一页</a>
+            <a class="btn btn-outline" href="/feeds?page={{add .Feeds.Page -1}}{{if .Feeds.Query}}&q={{.Feeds.Query | urlquery}}{{end}}{{range .Feeds.TagsSelected}}&tag={{. | urlquery}}{{end}}">上一页</a>
             {{else}}
             <button class="btn btn-outline" disabled>上一页</button>
             {{end}}
 
             {{if lt .Feeds.Page .Feeds.Pages}}
-            <a class="btn btn-outline" href="/feeds?page={{add .Feeds.Page 1}}{{if .Feeds.Query}}&q={{.Feeds.Query | urlquery}}{{end}}">下一页</a>
+            <a class="btn btn-outline" href="/feeds?page={{add .Feeds.Page 1}}{{if .Feeds.Query}}&q={{.Feeds.Query | urlquery}}{{end}}{{range .Feeds.TagsSelected}}&tag={{. | urlquery}}{{end}}">下一页</a>
             {{else}}
             <button class="btn btn-outline" disabled>下一页</button>
             {{end}}
@@ -129,12 +154,17 @@
                     <label class="text-sm font-medium">备注</label>
                     <input type="text" id="feed-remark" class="input">
                 </div>
+                <div class="space-y-2">
+                    <label class="text-sm font-medium">标签</label>
+                    <div id="feed-tags-picker"></div>
+                    <p class="text-xs text-muted-foreground">支持模糊搜索，回车可新增标签。</p>
+                </div>
                 <label class="flex items-center gap-2">
                     <input type="checkbox" id="feed-enabled" class="rounded border-gray-300" checked>
                     <span class="text-sm">启用</span>
                 </label>
             </div>
-            <div class="mt-6 flex justify-end gap-3">
+            <div class="mt-6 flex justify-center gap-3">
                 <button type="button" onclick="closeFeedModal()" class="btn btn-outline">取消</button>
                 <button id="feed-save-btn" type="submit" class="btn btn-primary">测试并保存</button>
             </div>
@@ -143,11 +173,68 @@
 </div>
 
 <script>
+let rssAllTags = [];
+let feedTagsFilterPicker = null;
+let feedTagsPicker = null;
+
+function loadSelectedTagsFromHidden(containerId) {
+    const box = document.getElementById(containerId);
+    if (!box) return [];
+    const out = [];
+    box.querySelectorAll('input[name="tag"]').forEach((i) => {
+        const v = (i.value || '').trim();
+        if (v) out.push(v);
+    });
+    return out;
+}
+
+async function loadRSSTags() {
+    const res = await fetch('/api/rss-tags');
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data && data.tags) ? data.tags : [];
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    try {
+        rssAllTags = await loadRSSTags();
+    } catch (_) {
+        rssAllTags = [];
+    }
+
+    const selected = loadSelectedTagsFromHidden('feed-tags-filter-hidden');
+    const filterMount = document.getElementById('feed-tags-filter');
+    const filterHidden = document.getElementById('feed-tags-filter-hidden');
+    if (filterMount && filterHidden && window.createShadcnTagMultiSelect) {
+        feedTagsFilterPicker = window.createShadcnTagMultiSelect({
+            mount: filterMount,
+            options: rssAllTags,
+            selected: selected,
+            placeholder: '标签过滤（可选）',
+            inputName: 'tag',
+            inputContainer: filterHidden
+        });
+    }
+
+    const pickerMount = document.getElementById('feed-tags-picker');
+    if (pickerMount && window.createShadcnTagInput) {
+        feedTagsPicker = window.createShadcnTagInput({
+            mount: pickerMount,
+            options: rssAllTags,
+            selected: [],
+            placeholder: '输入标签，回车添加（可选）'
+        });
+    }
+});
+
 function openFeedModal() {
     document.getElementById('feed-modal-title').textContent = '添加 RSS 订阅';
     document.getElementById('feed-form').reset();
     document.getElementById('feed-id').value = '';
     document.getElementById('feed-enabled').checked = true;
+    if (feedTagsPicker) {
+        feedTagsPicker.setSelected([]);
+    }
     const saveBtn = document.getElementById('feed-save-btn');
     if (saveBtn) {
         saveBtn.disabled = false;
@@ -193,6 +280,12 @@ function editFeed(id) {
             document.getElementById('feed-url').value = feed.url;
             document.getElementById('feed-remark').value = feed.remark || '';
             document.getElementById('feed-enabled').checked = feed.enabled;
+            if (feedTagsPicker) {
+                feedTagsPicker.setSelected(feed.tags || []);
+            }
+            if (window.applyTagBadgeColors) {
+                window.applyTagBadgeColors(document);
+            }
             const saveBtn = document.getElementById('feed-save-btn');
             if (saveBtn) {
                 saveBtn.disabled = false;
@@ -228,6 +321,7 @@ function saveFeed(e) {
         name: document.getElementById('feed-name').value,
         url: document.getElementById('feed-url').value,
         remark: document.getElementById('feed-remark').value,
+        tags: feedTagsPicker ? feedTagsPicker.getSelected() : [],
         enabled: document.getElementById('feed-enabled').checked
     };
 

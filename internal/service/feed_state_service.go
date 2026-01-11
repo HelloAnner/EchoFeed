@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 // RSS 订阅抓取状态：用于记录每个订阅的上次更新时间（最后一次抓取尝试时间），供页面展示。
 //
 // @author Anner

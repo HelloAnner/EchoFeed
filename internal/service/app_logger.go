@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 // 应用日志配置：根据 settings.toml 的 log 配置输出到控制台 + data/logs/app.log
 // @author Anner
 // Created on 2026/1/10

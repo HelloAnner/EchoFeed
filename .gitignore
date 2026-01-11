@@ -10,6 +10,7 @@ go.work
 
 # 数据目录
 data/
+bak/
 
 # IDE
 .idea/
@@ -26,5 +27,3 @@ Thumbs.db
 tmp/
 *.log
 *.tmp
-
-echofeed

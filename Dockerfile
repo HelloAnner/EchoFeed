@@ -14,6 +14,6 @@ COPY --from=builder /app/echofeed .
 COPY --from=builder /app/web ./web
 
 EXPOSE 33333
-VOLUME ["/app/data"]
+VOLUME ["/app/data", "/app/bak"]
 
 CMD ["./echofeed"]

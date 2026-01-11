@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+
 package main
 
 import (
@@ -70,6 +72,7 @@ func main() {
 	botHandler := handler.NewBotHandler(botSvc)
 	logHandler := handler.NewLogHandler(logSvc)
 	settingsHandler := handler.NewSettingsHandler(cfgMgr, sched)
+	rssTagHandler := handler.NewRSSTagHandler(cfgMgr)
 
 	// 页面路由
 	r.GET("/", pageHandler.Index)
@@ -98,6 +101,9 @@ func main() {
 		api.PUT("/feeds/:id", feedHandler.Update)
 		api.DELETE("/feeds/:id", feedHandler.Delete)
 		api.POST("/feeds/:id/refresh", feedHandler.Refresh)
+
+		// RSS Tag API
+		api.GET("/rss-tags", rssTagHandler.List)
 
 		// Task API
 		api.GET("/tasks", taskHandler.List)

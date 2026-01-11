@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 // 当日已发送记录：按天落盘到 data/rss/YYYY-MM-DD/sended.json，
 // 用于确保同一任务重复执行时，AI 两阶段输入都不包含已发送文章。
 // @author Anner

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+
 package service
 
 import (
@@ -588,7 +590,12 @@ func (e *TaskEngine) buildPhase1Prompt(task *model.Task, criteria string) string
 	if task != nil && task.Prompt.MinImportance > 0 {
 		minImportance = task.Prompt.MinImportance
 	}
-	return fmt.Sprintf("%s\n\n=== 筛选条件 ===\n%s\n\n最低重要度：%d/5\n", model.SystemPromptPhase1, strings.TrimSpace(criteria), minImportance)
+
+	desc := ""
+	if task != nil && strings.TrimSpace(task.Description) != "" {
+		desc = "\n\n=== 任务描述 ===\n" + strings.TrimSpace(task.Description) + "\n"
+	}
+	return fmt.Sprintf("%s%s\n\n=== 筛选条件 ===\n%s\n\n最低重要度：%d/5\n", model.SystemPromptPhase1, desc, strings.TrimSpace(criteria), minImportance)
 }
 
 func (e *TaskEngine) buildPhase2Prompt(task *model.Task, criteria, outputFormat string) string {
@@ -596,8 +603,14 @@ func (e *TaskEngine) buildPhase2Prompt(task *model.Task, criteria, outputFormat 
 	if task != nil && task.Prompt.MinImportance > 0 {
 		minImportance = task.Prompt.MinImportance
 	}
-	return fmt.Sprintf("%s\n\n=== 筛选条件 ===\n%s\n\n最低重要度：%d/5\n\n=== 输出格式（单篇文章）===\n%s\n\n请按系统要求输出 JSON（has_content + items），items 中每个对象按上面输出格式填充。\n",
+
+	desc := ""
+	if task != nil && strings.TrimSpace(task.Description) != "" {
+		desc = "\n\n=== 任务描述 ===\n" + strings.TrimSpace(task.Description) + "\n"
+	}
+	return fmt.Sprintf("%s%s\n\n=== 筛选条件 ===\n%s\n\n最低重要度：%d/5\n\n=== 输出格式（单篇文章）===\n%s\n\n请按系统要求输出 JSON（has_content + items），items 中每个对象按上面输出格式填充。\n",
 		model.SystemPromptPhase2,
+		desc,
 		strings.TrimSpace(criteria),
 		minImportance,
 		strings.TrimSpace(outputFormat),

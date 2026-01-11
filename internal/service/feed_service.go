@@ -1,13 +1,18 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+
 package service
 
 import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -30,6 +35,33 @@ type FeedService struct {
 	stateSvc *FeedStateService
 }
 
+// DuplicateFeedURLError RSS 订阅 URL 重复错误
+type DuplicateFeedURLError struct {
+	URL          string
+	ExistingID   string
+	ExistingName string
+}
+
+func (e *DuplicateFeedURLError) Error() string {
+	return "duplicate_feed_url"
+}
+
+func normalizeFeedURLForCompare(raw string) string {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimRight(raw, "/")
+	if raw == "" {
+		return ""
+	}
+
+	u, err := url.Parse(raw)
+	if err != nil {
+		return strings.ToLower(raw)
+	}
+	u.Scheme = strings.ToLower(u.Scheme)
+	u.Host = strings.ToLower(u.Host)
+	return u.String()
+}
+
 // NewFeedService 创建RSS订阅服务
 func NewFeedService(cfgMgr *config.Manager) *FeedService {
 	return &FeedService{
@@ -46,6 +78,18 @@ func (s *FeedService) List() ([]model.Feed, error) {
 		return nil, err
 	}
 	return cfg.Feeds, nil
+}
+
+// CheckDuplicateURL 检查订阅 URL 是否重复（selfID 为空表示创建；否则表示更新时排除自身）
+func (s *FeedService) CheckDuplicateURL(selfID, feedURL string) (*DuplicateFeedURLError, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	cfg, err := s.cfgMgr.LoadFeeds()
+	if err != nil {
+		return nil, err
+	}
+	return findDuplicateFeedURL(cfg.Feeds, selfID, feedURL), nil
 }
 
 // Get 获取单个订阅
@@ -72,11 +116,18 @@ func (s *FeedService) Create(feed *model.Feed) error {
 		return err
 	}
 
+	if dup := findDuplicateFeedURL(cfg.Feeds, "", feed.URL); dup != nil {
+		return dup
+	}
+
 	if feed.ID == "" {
 		feed.ID = uuid.New().String()[:8]
 	}
 	cfg.Feeds = append(cfg.Feeds, *feed)
-	return s.cfgMgr.SaveFeeds(cfg)
+	if err := s.cfgMgr.SaveFeeds(cfg); err != nil {
+		return err
+	}
+	return s.mergeFeedTags(feed.Tags)
 }
 
 // Update 更新订阅
@@ -89,13 +140,72 @@ func (s *FeedService) Update(feed *model.Feed) error {
 		return err
 	}
 
+	if dup := findDuplicateFeedURL(cfg.Feeds, feed.ID, feed.URL); dup != nil {
+		return dup
+	}
+
 	for i, f := range cfg.Feeds {
 		if f.ID == feed.ID {
 			cfg.Feeds[i] = *feed
-			return s.cfgMgr.SaveFeeds(cfg)
+			if err := s.cfgMgr.SaveFeeds(cfg); err != nil {
+				return err
+			}
+			return s.mergeFeedTags(feed.Tags)
 		}
 	}
 	return nil
+}
+
+func findDuplicateFeedURL(existing []model.Feed, selfID string, url string) *DuplicateFeedURLError {
+	want := normalizeFeedURLForCompare(url)
+	if want == "" {
+		return nil
+	}
+	for _, f := range existing {
+		if selfID != "" && f.ID == selfID {
+			continue
+		}
+		if normalizeFeedURLForCompare(f.URL) == want {
+			return &DuplicateFeedURLError{
+				URL:          strings.TrimSpace(url),
+				ExistingID:   f.ID,
+				ExistingName: f.Name,
+			}
+		}
+	}
+	return nil
+}
+
+func (s *FeedService) mergeFeedTags(tags []string) error {
+	tags = NormalizeTags(tags)
+	if len(tags) == 0 {
+		return nil
+	}
+
+	cfg, err := s.cfgMgr.LoadRSSTags()
+	if err != nil {
+		return err
+	}
+
+	existing := make(map[string]bool)
+	for _, t := range cfg.Tags {
+		existing[t] = true
+	}
+
+	changed := false
+	for _, t := range tags {
+		if t == "" || existing[t] {
+			continue
+		}
+		existing[t] = true
+		cfg.Tags = append(cfg.Tags, t)
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	sort.Strings(cfg.Tags)
+	return s.cfgMgr.SaveRSSTags(cfg)
 }
 
 // Delete 删除订阅
@@ -182,6 +292,15 @@ func (s *FeedService) TestFeedURL(url string) (string, int, error) {
 
 	title := strings.TrimSpace(parsed.Title)
 	return title, len(parsed.Items), nil
+}
+
+// IsDuplicateFeedURLError 判断是否为 URL 重复错误
+func IsDuplicateFeedURLError(err error) (*DuplicateFeedURLError, bool) {
+	var dup *DuplicateFeedURLError
+	if errors.As(err, &dup) && dup != nil {
+		return dup, true
+	}
+	return nil, false
 }
 
 // generateArticleID 生成文章ID (基于链接的MD5前8位)

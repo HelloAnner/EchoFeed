@@ -1,3 +1,4 @@
+{{/* SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0 */}}
 {{define "page_logs"}}
 <div class="space-y-6">
     <!-- 工具栏 -->
@@ -114,7 +115,7 @@
                         </td>
                         <td class="px-5 py-3 text-sm text-muted-foreground whitespace-nowrap">
                             {{if .Error}}
-                            <span class="text-red-600" title="{{.Error}}">{{.Error}}</span>
+                            <span class="text-red-600" data-tooltip="{{.Error}}">{{.Error}}</span>
                             {{else if .Details}}
                             {{.Details}}
                             {{else}}

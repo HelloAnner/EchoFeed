@@ -1,18 +1,19 @@
+{{/* SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0 */}}
 {{define "page_settings"}}
-<div class="max-w-2xl mx-auto">
-    <div class="card p-6">
-        <h2 class="text-lg font-semibold mb-6">系统设置</h2>
-        <form id="settings-form" onsubmit="saveSettings(event)" class="space-y-6">
+<div class="w-full">
+    <div class="card p-4">
+        <h2 class="text-lg font-semibold mb-4">系统设置</h2>
+        <form id="settings-form" onsubmit="saveSettings(event)" class="space-y-4">
             <!-- 服务器设置 -->
-            <div class="border-b pb-4">
-                <h3 class="font-medium mb-4">服务器设置</h3>
-                <div class="grid grid-cols-2 gap-4">
-                    <div class="space-y-2">
+            <div class="border-b pb-3">
+                <h3 class="font-medium mb-3">服务器设置</h3>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="space-y-2 md:col-span-3">
                         <label class="text-sm font-medium">监听地址</label>
                         <input type="text" id="server-host" value="{{if .Data}}{{.Data.Server.Host}}{{else}}0.0.0.0{{end}}" class="input">
-                        <p class="text-xs text-muted-foreground">如: 0.0.0.0 或 127.0.0.1</p>
+                        <p class="text-xs text-muted-foreground">如: 0.0.0.0</p>
                     </div>
-                    <div class="space-y-2">
+                    <div class="space-y-2 md:col-span-1">
                         <label class="text-sm font-medium">服务端口</label>
                         <input type="number" id="server-port" value="{{if .Data}}{{.Data.Server.Port}}{{else}}33333{{end}}" class="input">
                         <p class="text-xs text-muted-foreground">需重启生效</p>
@@ -21,9 +22,9 @@
             </div>
 
             <!-- RSS 拉取设置 -->
-            <div class="border-b pb-4">
-                <h3 class="font-medium mb-4">RSS 拉取设置</h3>
-                <div class="grid grid-cols-2 gap-4">
+            <div class="border-b pb-3">
+                <h3 class="font-medium mb-3">RSS 拉取设置</h3>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div class="space-y-2">
                         <label class="text-sm font-medium">默认拉取间隔 (分钟)</label>
                         <input type="number" id="fetch-interval" value="{{if .Data}}{{.Data.Fetch.DefaultInterval}}{{else}}5{{end}}" class="input" min="1">
@@ -32,8 +33,6 @@
                         <label class="text-sm font-medium">请求超时 (秒)</label>
                         <input type="number" id="fetch-timeout" value="{{if .Data}}{{.Data.Fetch.Timeout}}{{else}}30{{end}}" class="input" min="5">
                     </div>
-                </div>
-                <div class="grid grid-cols-2 gap-4 mt-4">
                     <div class="space-y-2">
                         <label class="text-sm font-medium">最大并发数</label>
                         <input type="number" id="fetch-concurrent" value="{{if .Data}}{{.Data.Fetch.MaxConcurrent}}{{else}}5{{end}}" class="input" min="1" max="20">
@@ -46,9 +45,9 @@
             </div>
 
             <!-- 日志设置 -->
-            <div class="border-b pb-4">
-                <h3 class="font-medium mb-4">日志设置</h3>
-                <div class="grid grid-cols-2 gap-4">
+            <div class="border-b pb-3">
+                <h3 class="font-medium mb-3">日志设置</h3>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div class="space-y-2">
                         <label class="text-sm font-medium">日志级别</label>
                         <select id="log-level" class="sr-only" data-shadcn-select="1">
@@ -62,18 +61,57 @@
                         <label class="text-sm font-medium">单文件大小上限 (MB)</label>
                         <input type="number" id="log-maxsize" value="{{if .Data}}{{.Data.Log.MaxSizeMB}}{{else}}100{{end}}" class="input" min="1">
                     </div>
-                </div>
-                <div class="grid grid-cols-2 gap-4 mt-4">
                     <div class="space-y-2">
                         <label class="text-sm font-medium">备份文件数量</label>
                         <input type="number" id="log-backups" value="{{if .Data}}{{.Data.Log.MaxBackups}}{{else}}3{{end}}" class="input" min="1">
+                    </div>
+                    <div class="hidden md:block"></div>
+                </div>
+            </div>
+
+            <!-- 备份设置 -->
+            <div class="border-b pb-3">
+                <h3 class="font-medium mb-3">备份设置</h3>
+                <div class="space-y-4">
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" id="backup-enabled" class="rounded border-gray-300" {{if or (not .Data) .Data.Backup.Enabled}}checked{{end}}>
+                        <span class="text-sm font-medium">启用自动备份</span>
+                    </label>
+
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium">周期</label>
+                            <input type="number" id="backup-every" value="{{if .Data}}{{.Data.Backup.Every}}{{else}}1{{end}}" class="input" min="1" max="30">
+                            <p class="text-xs text-muted-foreground">每 N 次</p>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium">单位</label>
+                            <select id="backup-unit" class="sr-only" data-shadcn-select="1">
+                                <option value="day" {{if or (not .Data) (eq .Data.Backup.Unit "day")}}selected{{end}}>天</option>
+                                <option value="hour" {{if and .Data (eq .Data.Backup.Unit "hour")}}selected{{end}}>小时</option>
+                            </select>
+                            <p class="text-xs text-muted-foreground">天/小时</p>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium">时间点</label>
+                            <input type="time" id="backup-at" value="{{if .Data}}{{.Data.Backup.At}}{{else}}03:00{{end}}" class="input">
+                            <p class="text-xs text-muted-foreground">默认 03:00</p>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium">保留备份次数</label>
+                            <input type="number" id="backup-retain" value="{{if .Data}}{{.Data.Backup.Retain}}{{else}}7{{end}}" class="input" min="1" max="100">
+                            <p class="text-xs text-muted-foreground">仅保留最近 N 个 zip</p>
+                        </div>
+                    </div>
+                    <div class="text-sm text-muted-foreground">
+                        备份 data/ 下的全部文件（包含 rss、logs 等目录）
                     </div>
                 </div>
             </div>
 
             <!-- 认证设置 -->
             <div class="pb-4">
-                <h3 class="font-medium mb-4">认证设置</h3>
+                <h3 class="font-medium mb-3">认证设置</h3>
                 <div class="space-y-4">
                     <label class="flex items-center gap-2">
                         <input type="checkbox" id="auth-enabled" class="rounded border-gray-300" {{if and .Data .Data.Auth.Enabled}}checked{{end}}>
@@ -92,7 +130,7 @@
                 </div>
             </div>
 
-            <div class="pt-4 flex gap-3">
+            <div class="pt-2 flex gap-3 justify-center">
                 <button type="submit" class="btn btn-primary">保存设置</button>
                 <button type="button" onclick="resetSettings()" class="btn btn-outline">重置</button>
             </div>
@@ -123,6 +161,13 @@ function saveSettings(e) {
             level: document.getElementById('log-level').value,
             max_size_mb: parseInt(document.getElementById('log-maxsize').value) || 100,
             max_backups: parseInt(document.getElementById('log-backups').value) || 3
+        },
+        backup: {
+            enabled: document.getElementById('backup-enabled').checked,
+            every: parseInt(document.getElementById('backup-every').value) || 1,
+            unit: document.getElementById('backup-unit').value,
+            at: document.getElementById('backup-at').value || '03:00',
+            retain: parseInt(document.getElementById('backup-retain').value) || 7
         },
         auth: {
             enabled: document.getElementById('auth-enabled').checked,

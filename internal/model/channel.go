@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+
 package model
 
 // Channel 通知渠道
@@ -26,7 +28,7 @@ const (
 
 // NotifyMessage 通知消息
 type NotifyMessage struct {
-	TaskID   string            `json:"task_id"`
-	TaskName string            `json:"task_name"`
-	Items    []AIAnalysisItem  `json:"items"`
+	TaskID   string           `json:"task_id"`
+	TaskName string           `json:"task_name"`
+	Items    []AIAnalysisItem `json:"items"`
 }

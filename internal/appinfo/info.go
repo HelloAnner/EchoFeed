@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 // 内置应用信息：版本与作者，从 info.json 读取（embed 到二进制）。
 // @author Anner
 // Created on 2026/1/10

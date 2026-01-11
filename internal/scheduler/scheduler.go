@@ -1,11 +1,17 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+
 package scheduler
 
 import (
 	"fmt"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/echofeed/echofeed/internal/config"
+	"github.com/echofeed/echofeed/internal/model"
 	"github.com/echofeed/echofeed/internal/service"
 )
 
@@ -20,9 +26,12 @@ type Scheduler struct {
 	logSvc     *service.LogService
 	taskEngine *service.TaskEngine
 	cleanupSvc *service.CleanupService
+	backupSvc  *service.BackupService
 	jobs       map[string]cron.EntryID
 	rssFetchID cron.EntryID
 	rssSpec    string
+	backupID   cron.EntryID
+	backupSpec string
 }
 
 // NewScheduler 创建调度器
@@ -36,6 +45,7 @@ func NewScheduler(
 ) *Scheduler {
 	taskEngine := service.NewTaskEngine(cfgMgr, feedSvc, taskSvc, botSvc, channelSvc, logSvc)
 	cleanupSvc := service.NewCleanupService(cfgMgr, logSvc)
+	backupSvc := service.NewBackupService(cfgMgr)
 
 	return &Scheduler{
 		cron:       cron.New(),
@@ -47,6 +57,7 @@ func NewScheduler(
 		logSvc:     logSvc,
 		taskEngine: taskEngine,
 		cleanupSvc: cleanupSvc,
+		backupSvc:  backupSvc,
 		jobs:       make(map[string]cron.EntryID),
 	}
 }
@@ -54,6 +65,7 @@ func NewScheduler(
 // Start 启动调度器
 func (s *Scheduler) Start() {
 	s.ReloadRSSFetch()
+	s.ReloadBackup()
 
 	// 数据清理任务：每天凌晨 1 点执行，保留最近 7 天
 	s.cron.AddFunc("0 1 * * *", func() {
@@ -118,6 +130,81 @@ func (s *Scheduler) ReloadRSSFetch() {
 	s.rssFetchID = entryID
 	s.rssSpec = spec
 	log.Info().Str("spec", spec).Msg("RSS fetch scheduled")
+}
+
+// ReloadBackup 根据系统设置重新加载备份定时任务
+func (s *Scheduler) ReloadBackup() {
+	if s.backupID != 0 {
+		s.cron.Remove(s.backupID)
+		s.backupID = 0
+	}
+
+	settings, err := s.cfgMgr.LoadSettings()
+	if err != nil || settings == nil {
+		log.Error().Err(err).Msg("Failed to load settings for backup")
+		return
+	}
+	if !settings.Backup.Enabled {
+		log.Info().Msg("Backup is disabled")
+		return
+	}
+
+	spec := buildBackupSpec(settings.Backup)
+	entryID, err := s.cron.AddFunc(spec, func() {
+		log.Info().Str("spec", spec).Msg("Scheduled backup started")
+		if err := s.backupSvc.RunOnce(settings.Backup); err != nil {
+			log.Error().Err(err).Msg("Scheduled backup failed")
+		}
+	})
+	if err != nil {
+		log.Error().Err(err).Str("spec", spec).Msg("Failed to schedule backup")
+		return
+	}
+
+	s.backupID = entryID
+	s.backupSpec = spec
+	log.Info().Str("spec", spec).Msg("Backup scheduled")
+}
+
+func buildBackupSpec(b model.BackupSettings) string {
+	every := b.Every
+	if every <= 0 {
+		every = 1
+	}
+	if every > 30 {
+		every = 30
+	}
+
+	h, m := parseHHMM(b.At, 3, 0)
+	minField := strconv.Itoa(m)
+
+	unit := strings.ToLower(strings.TrimSpace(b.Unit))
+	switch unit {
+	case "hour", "hours", "h":
+		return fmt.Sprintf("%s */%d * * *", minField, every)
+	default:
+		return fmt.Sprintf("%s %d */%d * *", minField, h, every)
+	}
+}
+
+func parseHHMM(s string, defH, defM int) (int, int) {
+	s = strings.TrimSpace(s)
+	parts := strings.Split(s, ":")
+	if len(parts) != 2 {
+		return defH, defM
+	}
+	h, errH := strconv.Atoi(strings.TrimSpace(parts[0]))
+	m, errM := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if errH != nil || errM != nil {
+		return defH, defM
+	}
+	if h < 0 || h > 23 {
+		h = defH
+	}
+	if m < 0 || m > 59 {
+		m = defM
+	}
+	return h, m
 }
 
 // Stop 停止调度器
@@ -202,4 +289,12 @@ func (s *Scheduler) TriggerTaskRunForDate(taskID, date string) {
 // GetNotifier 获取通知服务(用于测试)
 func (s *Scheduler) GetNotifier() *service.NotifierService {
 	return service.NewNotifierService()
+}
+
+// GetBackupNextRunAt 获取备份下次执行时间（用于页面展示/调试）
+func (s *Scheduler) GetBackupNextRunAt() time.Time {
+	if s.backupID == 0 {
+		return time.Time{}
+	}
+	return s.cron.Entry(s.backupID).Next
 }

@@ -4,9 +4,11 @@ COMPOSE ?= docker compose
 IMAGE ?= echofeed:local
 
 start:
+	mkdir -p data bak
 	$(COMPOSE) up -d --build --remove-orphans
 
 restart:
+	mkdir -p data bak
 	$(COMPOSE) down --remove-orphans
 	$(COMPOSE) up -d --build --remove-orphans
 

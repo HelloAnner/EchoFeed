@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 // 文本清洗工具：用于清洗 AI 输出的概述文本，避免带标签、链接或省略号影响展示。
 //
 // @author Anner

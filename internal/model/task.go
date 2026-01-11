@@ -1,11 +1,13 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+
 package model
 
 // TaskPrompt 任务提示词配置
 type TaskPrompt struct {
-	Template       string `toml:"template,omitempty" json:"template"`             // 旧字段：default / custom
-	FilterPrompt   string `toml:"filter_prompt,omitempty" json:"filter_prompt"`   // 旧字段：用户自定义筛选提示词
+	Template       string `toml:"template,omitempty" json:"template"`               // 旧字段：default / custom
+	FilterPrompt   string `toml:"filter_prompt,omitempty" json:"filter_prompt"`     // 旧字段：用户自定义筛选提示词
 	FilterCriteria string `toml:"filter_criteria,omitempty" json:"filter_criteria"` // 新字段：第一阶段筛选条件
-	OutputFormat   string `toml:"output_format,omitempty" json:"output_format"`   // 新字段：第二阶段输出格式（单篇文章）
+	OutputFormat   string `toml:"output_format,omitempty" json:"output_format"`     // 新字段：第二阶段输出格式（单篇文章）
 
 	Keywords      []string `toml:"keywords,omitempty" json:"keywords"`             // 关键词(可选，用于摘要补齐关键词)
 	MinImportance int      `toml:"min_importance,omitempty" json:"min_importance"` // 最低重要度(1-5)

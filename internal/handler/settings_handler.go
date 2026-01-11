@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+
 package handler
 
 import (
@@ -52,6 +54,25 @@ func (h *SettingsHandler) Update(c *gin.Context) {
 		settings.Auth.PasswordHash = current.Auth.PasswordHash
 	}
 
+	// 兼容旧前端未携带 backup 字段：保持原配置
+	if settings.Backup.At == "" && settings.Backup.Every == 0 && settings.Backup.Unit == "" && settings.Backup.Retain == 0 && !settings.Backup.Enabled {
+		settings.Backup = current.Backup
+	}
+
+	// 兜底：备份配置参数修正
+	if settings.Backup.Every <= 0 {
+		settings.Backup.Every = 1
+	}
+	if settings.Backup.Retain <= 0 {
+		settings.Backup.Retain = 7
+	}
+	if settings.Backup.At == "" {
+		settings.Backup.At = "03:00"
+	}
+	if settings.Backup.Unit == "" {
+		settings.Backup.Unit = "day"
+	}
+
 	if err := h.cfgMgr.SaveSettings(&settings); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -60,6 +81,7 @@ func (h *SettingsHandler) Update(c *gin.Context) {
 	service.ConfigureAppLogger(h.cfgMgr.DataDir, settings.Log)
 	if h.sched != nil {
 		h.sched.ReloadRSSFetch()
+		h.sched.ReloadBackup()
 	}
 
 	c.JSON(http.StatusOK, settings)

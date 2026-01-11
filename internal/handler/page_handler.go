@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+
 package handler
 
 import (
@@ -9,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"github.com/robfig/cron/v3"
@@ -100,20 +103,26 @@ type PageData struct {
 
 type TaskView struct {
 	model.Task
-	BotName      string
-	ScheduleDesc string
-	LastRunAt    string
-	NextRunAt    string
+	BotName         string
+	ChannelNames    string
+	ChannelNameList []string
+	DescPreview     string
+	DescFull        string
+	DescTruncated   bool
+	ScheduleDesc    string
+	LastRunAt       string
+	NextRunAt       string
 }
 
 type FeedListView struct {
-	Items    []FeedView
-	Total    int
-	TotalAll int
-	Page     int
-	PageSize int
-	Pages    int
-	Query    string
+	Items        []FeedView
+	Total        int
+	TotalAll     int
+	Page         int
+	PageSize     int
+	Pages        int
+	Query        string
+	TagsSelected []string
 }
 
 type FeedView struct {
@@ -229,6 +238,11 @@ func (h *PageHandler) Tasks(c *gin.Context) {
 		botNames[b.ID] = b.Name
 	}
 
+	channelNames := make(map[string]string, len(channels))
+	for _, ch := range channels {
+		channelNames[ch.ID] = ch.Name
+	}
+
 	var views []TaskView
 	for _, t := range tasks {
 		desc := describeCron(t.Schedule)
@@ -244,12 +258,31 @@ func (h *PageHandler) Tasks(c *gin.Context) {
 			}
 		}
 
+		var chNames []string
+		for _, id := range t.Channels {
+			if name := channelNames[id]; name != "" {
+				chNames = append(chNames, name)
+			}
+		}
+		sort.Strings(chNames)
+
+		descFull := strings.TrimSpace(t.Description)
+		if descFull == "" {
+			descFull = strings.TrimSpace(t.Remark)
+		}
+		descPreview, descTruncated := truncateRunes(descFull, 30)
+
 		views = append(views, TaskView{
-			Task:         t,
-			BotName:      botNames[t.BotID],
-			ScheduleDesc: desc,
-			LastRunAt:    last,
-			NextRunAt:    next,
+			Task:            t,
+			BotName:         botNames[t.BotID],
+			ChannelNames:    strings.Join(chNames, "、"),
+			ChannelNameList: chNames,
+			DescPreview:     descPreview,
+			DescFull:        descFull,
+			DescTruncated:   descTruncated,
+			ScheduleDesc:    desc,
+			LastRunAt:       last,
+			NextRunAt:       next,
 		})
 	}
 
@@ -297,13 +330,30 @@ func filterTasksByQuery(tasks []TaskView, q string) []TaskView {
 			strings.Contains(strings.ToLower(t.Name), q) ||
 			strings.Contains(strings.ToLower(t.Description), q) ||
 			strings.Contains(strings.ToLower(t.Remark), q) ||
+			strings.Contains(strings.ToLower(t.DescFull), q) ||
 			strings.Contains(strings.ToLower(t.BotID), q) ||
 			strings.Contains(strings.ToLower(t.BotName), q) ||
+			strings.Contains(strings.ToLower(t.ChannelNames), q) ||
+			strings.Contains(strings.ToLower(strings.Join(t.Channels, ",")), q) ||
 			strings.Contains(strings.ToLower(t.Schedule), q) {
 			out = append(out, t)
 		}
 	}
 	return out
+}
+
+func truncateRunes(s string, max int) (string, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", false
+	}
+	if max <= 0 {
+		return "", true
+	}
+	if utf8.RuneCountInString(s) <= max {
+		return s, false
+	}
+	return string([]rune(s)[:max]) + "…", true
 }
 
 func describeCron(expr string) string {
@@ -433,6 +483,7 @@ func (h *PageHandler) Feeds(c *gin.Context) {
 	feedState := service.NewFeedStateService(h.cfgMgr)
 
 	q := strings.TrimSpace(c.Query("q"))
+	tagsSelected := service.NormalizeTags(c.QueryArray("tag"))
 	page := 1
 	if p := strings.TrimSpace(c.Query("page")); p != "" {
 		if v, err := strconv.Atoi(p); err == nil && v > 0 {
@@ -442,7 +493,7 @@ func (h *PageHandler) Feeds(c *gin.Context) {
 	pageSize := 8
 
 	totalAll := len(feedsSorted)
-	filtered := filterFeedsByQuery(feedsSorted, q)
+	filtered := filterFeedsByQueryAndTags(feedsSorted, q, tagsSelected)
 	total := len(filtered)
 	pages := (total + pageSize - 1) / pageSize
 	if pages == 0 {
@@ -485,13 +536,14 @@ func (h *PageHandler) Feeds(c *gin.Context) {
 		Title:  "RSS订阅",
 		Active: "feeds",
 		Feeds: FeedListView{
-			Items:    items,
-			Total:    total,
-			TotalAll: totalAll,
-			Page:     page,
-			PageSize: pageSize,
-			Pages:    pages,
-			Query:    q,
+			Items:        items,
+			Total:        total,
+			TotalAll:     totalAll,
+			Page:         page,
+			PageSize:     pageSize,
+			Pages:        pages,
+			Query:        q,
+			TagsSelected: tagsSelected,
 		},
 	})
 }
@@ -529,12 +581,35 @@ func filterFeedsByQuery(feeds []model.Feed, q string) []model.Feed {
 	return out
 }
 
+func filterFeedsByQueryAndTags(feeds []model.Feed, q string, tags []string) []model.Feed {
+	filtered := filterFeedsByQuery(feeds, q)
+	if len(tags) == 0 {
+		return filtered
+	}
+
+	tagSet := make(map[string]bool, len(tags))
+	for _, t := range tags {
+		tagSet[t] = true
+	}
+
+	var out []model.Feed
+	for _, f := range filtered {
+		if len(f.Tags) == 0 {
+			continue
+		}
+		for _, t := range f.Tags {
+			if tagSet[strings.TrimSpace(t)] {
+				out = append(out, f)
+				break
+			}
+		}
+	}
+	return out
+}
+
 // FeedNew 新建RSS订阅页
 func (h *PageHandler) FeedNew(c *gin.Context) {
-	h.render(c, "layout.html", PageData{
-		Title:  "添加订阅",
-		Active: "feeds",
-	})
+	h.Feeds(c)
 }
 
 // Channels 通知渠道列表页

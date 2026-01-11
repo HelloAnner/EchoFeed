@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+
 package config
 
 import (
@@ -61,6 +63,11 @@ func (m *Manager) botsPath() string {
 // settingsPath 获取系统设置文件路径
 func (m *Manager) settingsPath() string {
 	return filepath.Join(m.DataDir, "settings.toml")
+}
+
+// rssTagPath 获取RSS标签配置文件路径
+func (m *Manager) rssTagPath() string {
+	return filepath.Join(m.DataDir, "rss-tag.toml")
 }
 
 // LoadFeeds 加载RSS订阅配置
@@ -222,12 +229,43 @@ func (m *Manager) LoadSettings() (*model.Settings, error) {
 	if _, err := toml.DecodeFile(path, &cfg); err != nil {
 		return nil, err
 	}
+
+	// 兼容旧版 settings.toml：补齐 backup 默认值
+	if cfg.Backup.Unit == "" && cfg.Backup.At == "" && cfg.Backup.Every == 0 && cfg.Backup.Retain == 0 {
+		cfg.Backup = model.DefaultSettings().Backup
+	}
 	return &cfg, nil
 }
 
 // SaveSettings 保存系统设置
 func (m *Manager) SaveSettings(cfg *model.Settings) error {
 	return saveToml(m.settingsPath(), cfg)
+}
+
+// LoadRSSTags 加载 RSS 标签配置
+func (m *Manager) LoadRSSTags() (*model.RSSTagConfig, error) {
+	path := m.rssTagPath()
+	if !fileExists(path) {
+		cfg := &model.RSSTagConfig{Tags: []string{}}
+		if err := m.SaveRSSTags(cfg); err != nil {
+			return nil, err
+		}
+		return cfg, nil
+	}
+
+	var cfg model.RSSTagConfig
+	if _, err := toml.DecodeFile(path, &cfg); err != nil {
+		return nil, err
+	}
+	if cfg.Tags == nil {
+		cfg.Tags = []string{}
+	}
+	return &cfg, nil
+}
+
+// SaveRSSTags 保存 RSS 标签配置
+func (m *Manager) SaveRSSTags(cfg *model.RSSTagConfig) error {
+	return saveToml(m.rssTagPath(), cfg)
 }
 
 // RSSCachePath 获取RSS缓存文件路径 (已废弃，保留兼容)

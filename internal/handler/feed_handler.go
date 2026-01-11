@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+
 package handler
 
 import (
@@ -80,6 +82,20 @@ func (h *FeedHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	feed.URL = strings.TrimSpace(feed.URL)
+	feed.Tags = service.NormalizeTags(feed.Tags)
+
+	if dup, err := h.feedSvc.CheckDuplicateURL("", feed.URL); err == nil && dup != nil {
+		details := ""
+		if strings.TrimSpace(dup.ExistingName) != "" || strings.TrimSpace(dup.ExistingID) != "" {
+			details = fmt.Sprintf("已存在订阅：%s（%s）", dup.ExistingName, dup.ExistingID)
+		}
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "保存失败：URL 已存在，不支持重复订阅",
+			"details": details,
+		})
+		return
+	}
 
 	if _, _, err := h.feedSvc.TestFeedURL(feed.URL); err != nil {
 		msg, details := feedTestErrorToChinese(err)
@@ -91,6 +107,17 @@ func (h *FeedHandler) Create(c *gin.Context) {
 	}
 
 	if err := h.feedSvc.Create(&feed); err != nil {
+		if dup, ok := service.IsDuplicateFeedURLError(err); ok {
+			details := ""
+			if strings.TrimSpace(dup.ExistingName) != "" || strings.TrimSpace(dup.ExistingID) != "" {
+				details = fmt.Sprintf("已存在订阅：%s（%s）", dup.ExistingName, dup.ExistingID)
+			}
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   "保存失败：URL 已存在，不支持重复订阅",
+				"details": details,
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -106,6 +133,20 @@ func (h *FeedHandler) Update(c *gin.Context) {
 		return
 	}
 	feed.ID = id
+	feed.URL = strings.TrimSpace(feed.URL)
+	feed.Tags = service.NormalizeTags(feed.Tags)
+
+	if dup, err := h.feedSvc.CheckDuplicateURL(feed.ID, feed.URL); err == nil && dup != nil {
+		details := ""
+		if strings.TrimSpace(dup.ExistingName) != "" || strings.TrimSpace(dup.ExistingID) != "" {
+			details = fmt.Sprintf("已存在订阅：%s（%s）", dup.ExistingName, dup.ExistingID)
+		}
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "保存失败：URL 已存在，不支持重复订阅",
+			"details": details,
+		})
+		return
+	}
 
 	if _, _, err := h.feedSvc.TestFeedURL(feed.URL); err != nil {
 		msg, details := feedTestErrorToChinese(err)
@@ -117,6 +158,17 @@ func (h *FeedHandler) Update(c *gin.Context) {
 	}
 
 	if err := h.feedSvc.Update(&feed); err != nil {
+		if dup, ok := service.IsDuplicateFeedURLError(err); ok {
+			details := ""
+			if strings.TrimSpace(dup.ExistingName) != "" || strings.TrimSpace(dup.ExistingID) != "" {
+				details = fmt.Sprintf("已存在订阅：%s（%s）", dup.ExistingName, dup.ExistingID)
+			}
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   "保存失败：URL 已存在，不支持重复订阅",
+				"details": details,
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

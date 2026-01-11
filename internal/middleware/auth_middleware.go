@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 // 基于 settings.toml 的 BasicAuth 中间件
 // @author Anner
 // Created on 2026/1/10

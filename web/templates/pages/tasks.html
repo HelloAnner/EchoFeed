@@ -1,54 +1,57 @@
+{{/* SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0 */}}
 {{define "page_tasks"}}
 {{if or (eq $.Title "新建任务") (eq $.Title "任务详情")}}
 <!-- Task Form -->
-<div class="max-w-3xl mx-auto">
-    <div class="card p-6">
+<div class="w-full">
+    <div class="card p-4">
         <form id="task-form" onsubmit="saveTask(event)">
             <input type="hidden" id="task-id" value="{{if .Data}}{{.Data.ID}}{{end}}">
 
-            <div class="space-y-6">
+            <div class="space-y-5">
                 <!-- Basic Info -->
                 <div>
-                    <h3 class="text-base font-medium mb-4">基本信息</h3>
+                    <h3 class="text-base font-medium mb-3">基本信息</h3>
                     {{if .Data}}
-                    <div class="mb-4 space-y-2">
+                    <div class="mb-3 space-y-2">
                         <label class="text-sm font-medium">任务 ID</label>
                         <input type="text" value="{{.Data.ID}}" class="input font-mono text-sm" readonly>
                     </div>
                     {{end}}
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="space-y-2">
-                            <label class="text-sm font-medium">任务名称 *</label>
-                            <input type="text" id="task-name" value="{{if .Data}}{{.Data.Name}}{{end}}" class="input" required>
+	                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+	                        <div class="space-y-2 md:col-span-2">
+	                            <label class="text-sm font-medium">任务名称 *</label>
+	                            <input type="text" id="task-name" value="{{if .Data}}{{.Data.Name}}{{end}}" class="input" required>
+	                        </div>
+	                        <div class="space-y-2 md:col-span-2">
+	                            <label class="text-sm font-medium">调度周期</label>
+	                            <div id="schedule-grid" class="grid grid-cols-2 gap-2">
+	                                <select id="schedule-every-value" class="sr-only" data-shadcn-select="1"></select>
+	                                <select id="schedule-every-unit" class="sr-only" data-shadcn-select="1"></select>
+	                                <div id="schedule-at-wrap" class="hidden">
+	                                    <select id="schedule-at-value" class="sr-only" data-shadcn-select="1"></select>
+	                                </div>
+	                            </div>
+	                            <p id="schedule-help" class="text-xs text-muted-foreground">每 N 分钟/小时/天 触发一次。</p>
+	                            <input type="hidden" id="task-schedule" value="{{if .Data}}{{.Data.Schedule}}{{else}}*/5 * * * *{{end}}">
+	                        </div>
+	                    </div>
+                    <div class="mt-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div class="space-y-2 md:col-span-2">
+                            <label class="text-sm font-medium">描述</label>
+                            <input type="text" id="task-description" value="{{if .Data}}{{.Data.Description}}{{end}}" class="input">
                         </div>
-                        <div class="space-y-2">
-                            <label class="text-sm font-medium">调度周期</label>
-                            <div class="grid grid-cols-3 gap-2">
-                                <select id="schedule-every-value" class="sr-only" data-shadcn-select="1"></select>
-                                <select id="schedule-every-unit" class="sr-only" data-shadcn-select="1"></select>
-                                <select id="schedule-at-value" class="sr-only" data-shadcn-select="1"></select>
-                            </div>
-                            <p id="schedule-help" class="text-xs text-muted-foreground">每 N 分钟/小时/天 触发一次。</p>
-                            <div class="mt-2 space-y-2">
-                                <label class="text-xs font-medium text-muted-foreground">Cron（高级，可选）</label>
-                                <input type="text" id="task-schedule" value="{{if .Data}}{{.Data.Schedule}}{{else}}0 9 * * *{{end}}" class="input font-mono text-sm">
-                            </div>
+                        <div class="space-y-2 md:col-span-2">
+                            <label class="text-sm font-medium">备注</label>
+                            <input type="text" id="task-remark" value="{{if .Data}}{{.Data.Remark}}{{end}}" class="input">
                         </div>
-                    </div>
-                    <div class="mt-4 space-y-2">
-                        <label class="text-sm font-medium">描述</label>
-                        <input type="text" id="task-description" value="{{if .Data}}{{.Data.Description}}{{end}}" class="input">
-                    </div>
-                    <div class="mt-4 space-y-2">
-                        <label class="text-sm font-medium">备注</label>
-                        <input type="text" id="task-remark" value="{{if .Data}}{{.Data.Remark}}{{end}}" class="input">
                     </div>
                 </div>
 
                 <!-- AI Config -->
                 <div class="border-t pt-6">
-                    <h3 class="text-base font-medium mb-4">AI 配置</h3>
-                    <div class="space-y-2">
+                    <h3 class="text-base font-medium mb-3">AI 配置</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-start">
+                        <div class="space-y-2 md:col-span-2">
                         <label class="text-sm font-medium">AI配置 *</label>
                         <select id="task-bot" class="sr-only" data-shadcn-select="1" required>
                             <option value="">请选择 AI配置</option>
@@ -56,31 +59,34 @@
                             <option value="{{.ID}}" {{if and $.Data (eq $.Data.BotID .ID)}}selected{{end}}>{{.Name}} ({{.Provider}})</option>
                             {{end}}
                         </select>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Prompt Config -->
                 <div class="border-t pt-6">
-                    <h3 class="text-base font-medium mb-4">筛选配置</h3>
-                    <div class="space-y-4">
-                        <div class="space-y-2">
+                    <h3 class="text-base font-medium mb-3">筛选配置</h3>
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                        <div class="space-y-2 xl:col-span-1">
                             <label class="text-sm font-medium">筛选条件</label>
-                            <textarea id="task-filter-criteria" rows="16" class="input" placeholder="例如：关注 AI Agent / RAG / Tool Use 等应用层进展；排除营销/重复信息；只保留有明确更新点或可落地细节的内容。">{{if .Data}}{{if .Data.Prompt.FilterCriteria}}{{.Data.Prompt.FilterCriteria}}{{else}}{{.Data.Prompt.FilterPrompt}}{{end}}{{end}}</textarea>
+                            <textarea id="task-filter-criteria" rows="12" class="input" placeholder="例如：关注 AI Agent / RAG / Tool Use 等应用层进展；排除营销/重复信息；只保留有明确更新点或可落地细节的内容。">{{if .Data}}{{if .Data.Prompt.FilterCriteria}}{{.Data.Prompt.FilterCriteria}}{{else}}{{.Data.Prompt.FilterPrompt}}{{end}}{{end}}</textarea>
                             <p class="text-xs text-muted-foreground">用于第一阶段：从 overview.json 里挑选需要进一步阅读全文的文章。</p>
                         </div>
-                        <div class="space-y-2">
+                        <div class="space-y-2 xl:col-span-1">
                             <label class="text-sm font-medium">输出格式</label>
-                            <textarea id="task-output-format" rows="16" class="input" placeholder="例如：每篇文章输出：核心结论 + 关键点（条目化）+ 关键词 + 重要性评分；summary 不要省略号。">{{if .Data}}{{.Data.Prompt.OutputFormat}}{{end}}</textarea>
+                            <textarea id="task-output-format" rows="12" class="input" placeholder="例如：每篇文章输出：核心结论 + 关键点（条目化）+ 关键词 + 重要性评分；summary 不要省略号。">{{if .Data}}{{.Data.Prompt.OutputFormat}}{{end}}</textarea>
                             <p class="text-xs text-muted-foreground">用于第二阶段：分析本地 txt 正文并按此格式组织每篇文章的输出。</p>
                         </div>
-                        <div class="space-y-2">
+                    </div>
+                    <div class="mt-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div class="space-y-2 md:col-span-3">
                             <label class="text-sm font-medium">关键词</label>
                             <input type="text" id="task-keywords" value="{{if .Data}}{{range $i, $k := .Data.Prompt.Keywords}}{{if $i}}, {{end}}{{$k}}{{end}}{{end}}" placeholder="AI, 机器学习, 深度学习" class="input">
                             <p class="text-xs text-muted-foreground">多个关键词用逗号分隔</p>
                         </div>
-                        <div class="space-y-2">
+                        <div class="space-y-2 md:col-span-1">
                             <label class="text-sm font-medium">最低重要度 (1-5)</label>
-                            <input type="number" id="task-min-importance" min="1" max="5" value="{{if .Data}}{{.Data.Prompt.MinImportance}}{{else}}3{{end}}" class="input w-24">
+                            <input type="number" id="task-min-importance" min="1" max="5" value="{{if .Data}}{{.Data.Prompt.MinImportance}}{{else}}3{{end}}" class="input">
                         </div>
                     </div>
                 </div>
@@ -110,7 +116,7 @@
                 </div>
             </div>
 
-            <div class="mt-8 flex justify-end gap-3">
+            <div class="mt-8 flex justify-center gap-3">
                 <a href="/tasks" class="btn btn-outline">取消</a>
                 <button type="submit" class="btn btn-primary">保存</button>
             </div>
@@ -139,97 +145,110 @@ function setSelectOptions(selectEl, options) {
 function parseScheduleToUI(cron) {
     const s = (cron || '').trim().replace(/\s+/g, ' ');
 
-    // minutes: "M/N * * * *" or "*/N * * * *"
-    let m = s.match(/^(\d{1,2})\/(\d{1,2}) \* \* \* \*$/);
+    // minutes: "*/N * * * *"
+    let m = s.match(/^\*\/(\d{1,2}) \* \* \* \*$/);
     if (m) {
-        return { unit: 'minutes', every: parseInt(m[2], 10), at: parseInt(m[1], 10), isCustom: false };
+        return { unit: 'minutes', every: parseInt(m[1], 10), at: 0 };
     }
-    m = s.match(/^\*\/(\d{1,2}) \* \* \* \*$/);
+    // legacy minutes: "M/N * * * *"（旧实现从第 M 分钟开始；新 UI 不再支持 offset，回显时忽略 M）
+    m = s.match(/^(\d{1,2})\/(\d{1,2}) \* \* \* \*$/);
     if (m) {
-        return { unit: 'minutes', every: parseInt(m[1], 10), at: 0, isCustom: false };
+        return { unit: 'minutes', every: parseInt(m[2], 10), at: 0 };
     }
 
-    // hours: "M */N * * *"
-    m = s.match(/^(\d{1,2}) \*\/(\d{1,2}) \* \* \*$/);
+    // hours: "0 */N * * *"
+    m = s.match(/^0 \*\/(\d{1,2}) \* \* \*$/);
     if (m) {
-        return { unit: 'hours', every: parseInt(m[2], 10), at: parseInt(m[1], 10), isCustom: false };
-    }
+        return { unit: 'hours', every: parseInt(m[1], 10), at: 0 };
+	    }
 
-    // days: "0 H */N * *"
-    m = s.match(/^0 (\d{1,2}) \*\/(\d{1,2}) \* \*$/);
-    if (m) {
-        return { unit: 'days', every: parseInt(m[2], 10), at: parseInt(m[1], 10), isCustom: false };
-    }
+	    // days: "0 H */N * *"
+	    m = s.match(/^0 (\d{1,2}) \*\/(\d{1,2}) \* \*$/);
+	    if (m) {
+	        return { unit: 'days', every: parseInt(m[2], 10), at: parseInt(m[1], 10) };
+	    }
 
-    // legacy daily: "0 H * * *"
-    m = s.match(/^0 (\d{1,2}) \* \* \*$/);
-    if (m) {
-        return { unit: 'days', every: 1, at: parseInt(m[1], 10), isCustom: false };
-    }
+	    // legacy daily: "0 H * * *"
+	    m = s.match(/^0 (\d{1,2}) \* \* \*$/);
+	    if (m) {
+	        return { unit: 'days', every: 1, at: parseInt(m[1], 10) };
+	    }
 
-    return { unit: 'custom', every: 1, at: 0, isCustom: true };
-}
+	    return { unit: 'minutes', every: 5, at: 0 };
+	}
 
-function buildCronFromUI(unit, every, at) {
-    const n = Math.max(1, Math.min(60, parseInt(every, 10) || 1));
-    if (unit === 'minutes') {
-        const minute = Math.max(0, Math.min(59, parseInt(at, 10) || 0));
-        return `${minute}/${n} * * * *`;
-    }
-    if (unit === 'hours') {
-        const minute = Math.max(0, Math.min(59, parseInt(at, 10) || 0));
-        return `${minute} */${n} * * *`;
-    }
-    if (unit === 'days') {
-        const hour = Math.max(0, Math.min(23, parseInt(at, 10) || 0));
-        return `0 ${hour} */${n} * *`;
-    }
-    return document.getElementById('task-schedule').value.trim();
-}
+	function buildCronFromUI(unit, every, at) {
+	    const n = Math.max(1, Math.min(60, parseInt(every, 10) || 1));
+	    if (unit === 'minutes') {
+	        return `*/${n} * * * *`;
+	    }
+	    if (unit === 'hours') {
+	        return `0 */${n} * * *`;
+	    }
+	    if (unit === 'days') {
+	        const hour = Math.max(0, Math.min(23, parseInt(at, 10) || 0));
+	        return `0 ${hour} */${n} * *`;
+	    }
+	    return `*/${n} * * * *`;
+	}
 
-function refreshScheduleUI() {
-    const everyEl = document.getElementById('schedule-every-value');
-    const unitEl = document.getElementById('schedule-every-unit');
-    const atEl = document.getElementById('schedule-at-value');
-    const cronEl = document.getElementById('task-schedule');
-    const helpEl = document.getElementById('schedule-help');
+	function setAtVisibility(show) {
+	    const wrap = document.getElementById('schedule-at-wrap');
+	    const grid = document.getElementById('schedule-grid');
+	    if (!wrap || !grid) return;
+	    if (show) {
+	        wrap.classList.remove('hidden');
+	        grid.classList.remove('grid-cols-2');
+	        grid.classList.add('grid-cols-3');
+	    } else {
+	        wrap.classList.add('hidden');
+	        grid.classList.remove('grid-cols-3');
+	        grid.classList.add('grid-cols-2');
+	    }
+	}
 
-    const unit = unitEl.value;
-    const every = everyEl.value;
-    const at = atEl.value;
+	function refreshScheduleUI() {
+	    const everyEl = document.getElementById('schedule-every-value');
+	    const unitEl = document.getElementById('schedule-every-unit');
+	    const atEl = document.getElementById('schedule-at-value');
+	    const cronEl = document.getElementById('task-schedule');
+	    const helpEl = document.getElementById('schedule-help');
 
-    if (unit === 'custom') {
-        atEl.disabled = true;
-        if (atEl.__shadcnSelect) atEl.__shadcnSelect.sync();
-        helpEl.textContent = '自定义 Cron：直接编辑下方 Cron 表达式。';
-        return;
-    }
+	    const unit = unitEl.value;
+	    const every = everyEl.value;
+	    const at = atEl ? atEl.value : '0';
 
-    atEl.disabled = false;
-    if (atEl.__shadcnSelect) atEl.__shadcnSelect.sync();
-    cronEl.value = buildCronFromUI(unit, every, at);
+	    const showAt = unit === 'days';
+	    setAtVisibility(showAt);
 
-    if (unit === 'minutes') {
-        helpEl.textContent = `每 ${every} 分钟触发一次（从每小时第 ${at} 分钟开始）。`;
-    } else if (unit === 'hours') {
-        helpEl.textContent = `每 ${every} 小时触发一次（在每小时第 ${at} 分钟）。`;
-    } else if (unit === 'days') {
-        helpEl.textContent = `每 ${every} 天触发一次（每天 ${pad2(at)}:00）。`;
-    }
-}
+	    if (atEl) {
+	        atEl.disabled = !showAt;
+	        if (atEl.__shadcnSelect) atEl.__shadcnSelect.sync();
+	    }
+
+	    cronEl.value = buildCronFromUI(unit, every, at);
+
+	    if (unit === 'minutes') {
+	        helpEl.textContent = `每 ${every} 分钟触发一次。`;
+	    } else if (unit === 'hours') {
+	        helpEl.textContent = `每 ${every} 小时触发一次（整点）。`;
+	    } else if (unit === 'days') {
+	        helpEl.textContent = `每 ${every} 天触发一次（每天 ${pad2(at)}:00）。`;
+	    }
+	}
 
 function initScheduleEditor() {
     const everyEl = document.getElementById('schedule-every-value');
     const unitEl = document.getElementById('schedule-every-unit');
     const atEl = document.getElementById('schedule-at-value');
     const cronEl = document.getElementById('task-schedule');
+    let lastDayAt = '';
 
-    setSelectOptions(unitEl, [
-        { value: 'minutes', label: '分钟' },
-        { value: 'hours', label: '小时' },
-        { value: 'days', label: '天' },
-        { value: 'custom', label: '自定义' }
-    ]);
+	    setSelectOptions(unitEl, [
+	        { value: 'minutes', label: '分钟' },
+	        { value: 'hours', label: '小时' },
+	        { value: 'days', label: '天' }
+	    ]);
 
     const everyOpts = [];
     for (let i = 1; i <= 60; i++) everyOpts.push({ value: i, label: String(i) });
@@ -240,6 +259,8 @@ function initScheduleEditor() {
 
     unitEl.value = parsed.unit;
     everyEl.value = String(parsed.every || 1);
+    if (unitEl.__shadcnSelect) unitEl.__shadcnSelect.sync();
+    if (everyEl.__shadcnSelect) everyEl.__shadcnSelect.sync();
 
     unitEl.addEventListener('change', () => {
         const unit = unitEl.value;
@@ -247,41 +268,28 @@ function initScheduleEditor() {
             const opts = [];
             for (let h = 0; h <= 23; h++) opts.push({ value: h, label: `${pad2(h)}:00` });
             setSelectOptions(atEl, opts);
-            atEl.value = '9';
+            atEl.value = lastDayAt || '9';
         } else {
-            const opts = [];
-            for (let m = 0; m <= 59; m++) opts.push({ value: m, label: `${pad2(m)} 分` });
-            setSelectOptions(atEl, opts);
+            if (atEl && atEl.value) {
+                lastDayAt = atEl.value;
+            }
             atEl.value = '0';
         }
+        if (atEl.__shadcnSelect) atEl.__shadcnSelect.sync();
         refreshScheduleUI();
     });
 
-    if (parsed.unit === 'days') {
-        const opts = [];
-        for (let h = 0; h <= 23; h++) opts.push({ value: h, label: `${pad2(h)}:00` });
-        setSelectOptions(atEl, opts);
-    } else {
-        const opts = [];
-        for (let m = 0; m <= 59; m++) opts.push({ value: m, label: `${pad2(m)} 分` });
-        setSelectOptions(atEl, opts);
-    }
+    const opts = [];
+    for (let h = 0; h <= 23; h++) opts.push({ value: h, label: `${pad2(h)}:00` });
+    setSelectOptions(atEl, opts);
     atEl.value = String(parsed.at || 0);
+    if (parsed.unit === 'days') {
+        lastDayAt = String(parsed.at || 0);
+    }
+    if (atEl.__shadcnSelect) atEl.__shadcnSelect.sync();
 
     everyEl.addEventListener('change', refreshScheduleUI);
     atEl.addEventListener('change', refreshScheduleUI);
-    cronEl.addEventListener('input', () => {
-        const p = parseScheduleToUI(cronEl.value);
-        if (!p.isCustom) {
-            unitEl.value = p.unit;
-            everyEl.value = String(p.every);
-            unitEl.dispatchEvent(new Event('change'));
-            atEl.value = String(p.at);
-        } else {
-            unitEl.value = 'custom';
-        }
-        refreshScheduleUI();
-    });
 
     refreshScheduleUI();
 }
@@ -376,13 +384,13 @@ function saveTask(e) {
         </a>
     </div>
 
-    <div class="flex items-center justify-between gap-3">
-        <form method="GET" action="/tasks" class="flex-1 flex items-center gap-2">
-            <input type="text" name="q" value="{{.Tasks.Query}}" class="input max-w-md" placeholder="搜索名称/备注/ID/AI配置/Cron（模糊匹配）">
-            <button type="submit" class="btn btn-outline">搜索</button>
-            {{if .Tasks.Query}}
-            <a href="/tasks" class="btn btn-ghost">清空</a>
-            {{end}}
+	    <div class="flex items-center justify-between gap-3">
+	        <form method="GET" action="/tasks" class="flex-1 flex items-center gap-2">
+	            <input type="text" name="q" value="{{.Tasks.Query}}" class="input max-w-md" placeholder="搜索名称/备注/ID/通知渠道（模糊匹配）">
+	            <button type="submit" class="btn btn-outline">搜索</button>
+	            {{if .Tasks.Query}}
+	            <a href="/tasks" class="btn btn-ghost">清空</a>
+	            {{end}}
         </form>
         <div class="text-xs text-muted-foreground whitespace-nowrap">
             第 {{.Tasks.Page}} / {{.Tasks.Pages}} 页
@@ -390,33 +398,49 @@ function saveTask(e) {
     </div>
 
     <div class="card overflow-hidden">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>任务名称</th>
-                    <th>AI配置</th>
-                    <th>调度周期</th>
-                    <th>上次/下次执行</th>
-                    <th>状态</th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody>
-                {{range .Tasks.Items}}
-                <tr>
-                    <td>
-                        <div>
-                            <p class="font-medium">{{.Name}}</p>
-                            <p class="text-sm text-muted-foreground">{{if .Description}}{{.Description}}{{else}}{{.Remark}}{{end}}</p>
-                        </div>
-                    </td>
-                    <td class="text-sm text-muted-foreground">
-                        {{if .BotName}}{{.BotName}}{{else}}{{.BotID}}{{end}}
-                    </td>
-                    <td class="whitespace-nowrap">
-                        <div class="flex items-center gap-2">
-                            <code class="text-xs bg-secondary px-2 py-1 rounded">{{.Schedule}}</code>
-                            <span class="text-xs text-muted-foreground">{{.ScheduleDesc}}</span>
+	        <table class="table">
+	            <thead>
+	                <tr>
+	                    <th>任务名称</th>
+	                    <th>通知渠道</th>
+	                    <th>调度周期</th>
+	                    <th>上次/下次执行</th>
+	                    <th>状态</th>
+	                    <th>操作</th>
+	                </tr>
+	            </thead>
+	            <tbody>
+	                {{range .Tasks.Items}}
+	                <tr>
+	                    <td>
+	                        <div>
+	                            <p class="font-medium">{{.Name}}</p>
+	                            {{if .DescPreview}}
+	                                {{if .DescTruncated}}
+	                                    <p class="text-sm text-muted-foreground max-w-[360px] truncate" data-tooltip="{{.DescFull}}">{{.DescPreview}}</p>
+	                                {{else}}
+	                                    <p class="text-sm text-muted-foreground">{{.DescPreview}}</p>
+	                                {{end}}
+	                            {{else}}
+	                                <p class="text-sm text-muted-foreground">-</p>
+	                            {{end}}
+	                        </div>
+	                    </td>
+	                    <td class="text-sm text-muted-foreground">
+	                        {{if .ChannelNameList}}
+	                            <div class="flex flex-col gap-1">
+	                                {{range .ChannelNameList}}
+	                                    <span class="whitespace-nowrap">{{.}}</span>
+	                                {{end}}
+	                            </div>
+	                        {{else}}
+	                            -
+	                        {{end}}
+	                    </td>
+	                    <td class="whitespace-nowrap">
+	                        <div class="flex items-center gap-2">
+	                            <code class="text-xs bg-secondary px-2 py-1 rounded">{{.Schedule}}</code>
+	                            <span class="text-xs text-muted-foreground">{{.ScheduleDesc}}</span>
                         </div>
                     </td>
                     <td class="whitespace-nowrap text-sm text-muted-foreground">
@@ -434,18 +458,18 @@ function saveTask(e) {
                     </td>
                     <td>
                         <div class="flex items-center gap-1">
-                            <button onclick="runTask('{{.ID}}')" class="btn btn-ghost p-2" title="立即执行">
+                            <button onclick="runTask('{{.ID}}')" class="btn btn-ghost p-2" data-tooltip="立即执行">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                                 </svg>
                             </button>
-                            <a href="/tasks/{{.ID}}" class="btn btn-ghost p-2" title="编辑">
+                            <a href="/tasks/{{.ID}}" class="btn btn-ghost p-2" data-tooltip="编辑">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
                                 </svg>
                             </a>
-                            <button onclick="deleteTask('{{.ID}}')" class="btn btn-ghost p-2 text-destructive" title="删除">
+                            <button onclick="deleteTask('{{.ID}}')" class="btn btn-ghost p-2 text-destructive" data-tooltip="删除">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                                 </svg>
