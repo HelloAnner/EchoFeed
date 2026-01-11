@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 
 	"github.com/echofeed/echofeed/internal/config"
 	"github.com/echofeed/echofeed/internal/model"
@@ -13,13 +14,19 @@ import (
 
 // TaskService 任务服务
 type TaskService struct {
-	cfgMgr *config.Manager
-	mu     sync.RWMutex
+	cfgMgr    *config.Manager
+	viewedSvc *ViewedService
+	taskState *TaskStateService
+	mu        sync.RWMutex
 }
 
 // NewTaskService 创建任务服务
 func NewTaskService(cfgMgr *config.Manager) *TaskService {
-	return &TaskService{cfgMgr: cfgMgr}
+	return &TaskService{
+		cfgMgr:    cfgMgr,
+		viewedSvc: NewViewedService(cfgMgr),
+		taskState: NewTaskStateService(cfgMgr),
+	}
 }
 
 // List 获取所有任务
@@ -75,7 +82,16 @@ func (s *TaskService) Update(task *model.Task) error {
 	for i, t := range cfg.Tasks {
 		if t.ID == task.ID {
 			cfg.Tasks[i] = *task
-			return s.cfgMgr.SaveTasks(cfg)
+			if err := s.cfgMgr.SaveTasks(cfg); err != nil {
+				return err
+			}
+			if err := s.viewedSvc.ClearTask(task.ID); err != nil {
+				log.Warn().Err(err).Str("task_id", task.ID).Msg("Failed to clear viewed.json after task update")
+			}
+			if err := s.taskState.ResetAnalysis(task.ID); err != nil {
+				log.Warn().Err(err).Str("task_id", task.ID).Msg("Failed to reset task analysis state after task update")
+			}
+			return nil
 		}
 	}
 	return nil

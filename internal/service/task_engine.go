@@ -24,6 +24,7 @@ type TaskEngine struct {
 	logSvc     *LogService
 	taskState  *TaskStateService
 	sentSvc    *SentService
+	viewedSvc  *ViewedService
 	aiSvc      *AIService
 	notifier   *NotifierService
 }
@@ -46,6 +47,7 @@ func NewTaskEngine(
 		logSvc:     logSvc,
 		taskState:  NewTaskStateService(cfgMgr),
 		sentSvc:    NewSentService(cfgMgr),
+		viewedSvc:  NewViewedService(cfgMgr),
 		aiSvc:      NewAIService(),
 		notifier:   NewNotifierService(),
 	}
@@ -141,6 +143,22 @@ func (e *TaskEngine) ExecuteTaskForDate(taskID string, date string) error {
 		return nil
 	}
 
+	viewedIDs, err := e.viewedSvc.GetViewedIDs(date, task.ID)
+	if err != nil {
+		log.Warn().Err(err).Str("task", task.Name).Str("date", date).Msg("Failed to load viewed.json, treat as empty")
+		viewedIDs = make(map[string]bool)
+	}
+	beforeViewedCount := len(filteredOverview.Articles)
+	filteredOverview = e.filterOverviewByViewed(filteredOverview, viewedIDs)
+	detailParts = append(detailParts, fmt.Sprintf("排除已浏览=%d", beforeViewedCount-len(filteredOverview.Articles)))
+	if len(filteredOverview.Articles) == 0 {
+		log.Info().Str("task", task.Name).Str("date", date).Msg("All articles already viewed, skipping task execution")
+		execLog.Status = model.LogStatusNoMatch
+		detailParts = append(detailParts, "原因=今日文章已全部浏览（第一阶段已尝试）")
+		execLog.Details = strings.Join(detailParts, "; ")
+		return nil
+	}
+
 	var articleIDs []string
 	for _, a := range filteredOverview.Articles {
 		articleIDs = append(articleIDs, a.ID)
@@ -156,6 +174,15 @@ func (e *TaskEngine) ExecuteTaskForDate(taskID string, date string) error {
 
 	execLog.ArticleCount = len(filteredOverview.Articles)
 	detailParts = append(detailParts, fmt.Sprintf("分析池=%d", execLog.ArticleCount))
+
+	phase1Candidates := make([]model.ArticleSummary, 0, len(filteredOverview.Articles))
+	phase1Candidates = append(phase1Candidates, filteredOverview.Articles...)
+
+	markViewedCandidates := func() {
+		if err := e.viewedSvc.MarkViewed(date, task, phase1Candidates, "phase1"); err != nil {
+			log.Warn().Err(err).Str("task", task.Name).Str("date", date).Msg("Failed to update viewed.json")
+		}
+	}
 
 	// 获取AI机器人
 	bot, err := e.botSvc.Get(task.BotID)
@@ -207,6 +234,7 @@ func (e *TaskEngine) ExecuteTaskForDate(taskID string, date string) error {
 	}
 	selectedIDs = e.filterSelectedIDsBySent(selectedIDs, sentIDs)
 	if len(selectedIDs) == 0 {
+		markViewedCandidates()
 		log.Info().Str("task", task.Name).Str("reason", selectionResult.Reason).Msg("No articles selected in phase 1")
 		execLog.Status = model.LogStatusNoMatch
 		detailParts = append(detailParts, "原因=第一阶段未选中任何文章："+truncateForLog(selectionResult.Reason, 200))
@@ -242,6 +270,7 @@ func (e *TaskEngine) ExecuteTaskForDate(taskID string, date string) error {
 
 	// 检查是否有匹配内容
 	if !analysisResult.HasContent || len(analysisResult.Items) == 0 {
+		markViewedCandidates()
 		log.Info().Str("task", task.Name).Msg("No matching content found after detailed analysis")
 		execLog.Status = model.LogStatusNoMatch
 		detailParts = append(detailParts, "原因=第二阶段无匹配内容")
@@ -256,6 +285,7 @@ func (e *TaskEngine) ExecuteTaskForDate(taskID string, date string) error {
 	// 去重 + 补齐通知字段（标题/来源/发布时间/关键词/摘要长度）
 	prepared := e.prepareNotifyItems(task, analysisResult.Items, filteredOverview, sentIDs)
 	if len(prepared) == 0 {
+		markViewedCandidates()
 		log.Info().Str("task", task.Name).Msg("All matched content already processed or below importance")
 		execLog.Status = model.LogStatusNoMatch
 		detailParts = append(detailParts, "原因=匹配内容均已发送或重要性不足")
@@ -272,6 +302,7 @@ func (e *TaskEngine) ExecuteTaskForDate(taskID string, date string) error {
 		execLog.Error = err.Error()
 		return err
 	}
+	markViewedCandidates()
 	execLog.Status = model.LogStatusSuccess
 	detailParts = append(detailParts, fmt.Sprintf("已发送=%d", execLog.MatchCount))
 	return nil
@@ -708,6 +739,26 @@ func (e *TaskEngine) filterOverviewBySent(overview *model.DailyOverview, sentIDs
 	var kept []model.ArticleSummary
 	for _, a := range overview.Articles {
 		if a.ID != "" && sentIDs[a.ID] {
+			continue
+		}
+		kept = append(kept, a)
+	}
+	cp := *overview
+	cp.Articles = kept
+	cp.TotalCount = len(kept)
+	return &cp
+}
+
+func (e *TaskEngine) filterOverviewByViewed(overview *model.DailyOverview, viewedIDs map[string]bool) *model.DailyOverview {
+	if overview == nil {
+		return overview
+	}
+	if len(viewedIDs) == 0 {
+		return overview
+	}
+	var kept []model.ArticleSummary
+	for _, a := range overview.Articles {
+		if a.ID != "" && viewedIDs[a.ID] {
 			continue
 		}
 		kept = append(kept, a)

@@ -102,6 +102,21 @@ func (s *TaskStateService) MarkOverviewAnalyzed(taskID, date, overviewHash strin
 	return s.save(taskID, state)
 }
 
+// ResetAnalysis 清理某个任务的“概览已分析”状态（任务配置变更后用于重新评估）
+func (s *TaskStateService) ResetAnalysis(taskID string) error {
+	if taskID == "" {
+		return nil
+	}
+	state, err := s.load(taskID)
+	if err != nil {
+		return err
+	}
+	state.LastAnalyzedDate = ""
+	state.LastAnalyzedHash = ""
+	state.UpdatedAt = time.Now()
+	return s.save(taskID, state)
+}
+
 // MarkTaskRun 记录任务上次执行时间（不区分成功/失败/跳过）
 func (s *TaskStateService) MarkTaskRun(taskID string, at time.Time) error {
 	if taskID == "" || at.IsZero() {
