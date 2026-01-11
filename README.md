@@ -35,30 +35,37 @@ Screenshots are taken from the Web UI after starting locally (`http://localhost:
 
 ### Dashboard
 
+- Overview of key metrics (feeds/tasks/channels/bots) and recent activity (new posts, fetches, pushes, executions).
 ![Dashboard](img/dashboard.png)
 
 ### Tasks
 
+- Create and manage filtering rules (keywords/prompts, minimum importance) and task-level deduplication.
 ![Tasks](img/tasks.png)
 
 ### RSS Feeds
 
+- Add/edit RSS subscriptions; validate URL connectivity and parsability before saving.
 ![RSS Feeds](img/feeds.png)
 
 ### Notification Channels
 
+- Configure notification channels; “test and save” is required (only save after a successful test send).
 ![Notification Channels](img/channels.png)
 
 ### AI Bots
 
+- Configure AI bots used by tasks; “test and save” is required (only save after a successful test).
 ![AI Bots](img/bots.png)
 
 ### Execution Logs
 
+- Inspect recent executions and error details for debugging and auditing.
 ![Execution Logs](img/logs.png)
 
 ### Settings
 
+- Manage global service settings (such as server configuration and scheduling-related options).
 ![Settings](img/settings.png)
 
 ## Configuration
@@ -69,4 +76,3 @@ Config files are stored in `./data/` by default:
 - `data/channels.toml`: notification channels
 - `data/bots.toml`: AI bots
 - `data/settings.toml`: server port and settings
-
